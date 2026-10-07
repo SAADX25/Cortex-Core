@@ -7,7 +7,7 @@ async function openExplorer(page: Page, diagram = false) {
     page.getByTestId('canvas-stage').locator('canvas').or(page.getByTestId('fallback-diagram')),
   ).toBeVisible();
 }
-test('landing stays lightweight; viewer, selection, exploded view and quality work', async ({
+test('home stays lightweight; viewer, selection, exploded view and quality work', async ({
   page,
 }) => {
   const errors: string[] = [];
@@ -15,7 +15,7 @@ test('landing stays lightweight; viewer, selection, exploded view and quality wo
   page.on('pageerror', (error) => errors.push(error.message));
   page.on('request', (request) => assets.push(request.url()));
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: /Get closer to/ })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /Your hardware workspace/ })).toBeVisible();
   expect(assets.some((url) => /renderer\.tsx|three\.module|react-three_fiber/.test(url))).toBe(
     false,
   );

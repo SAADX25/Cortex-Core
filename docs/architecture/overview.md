@@ -4,9 +4,13 @@ The hardware record is technical truth. A visual template receives validated con
 
 ```mermaid
 flowchart TD
-  W[React application] --> Q[TanStack Query]
+  T[Tauri native host] --> W[Shared React application UI]
+  B[Browser test harness] --> W
+  T --> L[SQLite versioned fixture snapshot]
+  W --> Q[TanStack Query]
   Q --> D[Data repository]
   D --> S[Runtime hardware schemas]
+  D --> L
   D --> DB[Supabase security-invoker view]
   W --> C[Pure compatibility engine]
   C --> S
@@ -28,4 +32,4 @@ R3F owns procedural JSX geometry and materials, including instanced decorations.
 
 WebGL 2 is the only graphics baseline. Renderer creation and module loading sit inside an error boundary; context-loss events leave 3D and activate the diagram. Data errors remain separate and offer data retry. WebGPU can be a second renderer adapter later without changing schema, compatibility or UI state. Known provenance/compatibility unknowns are visible text, never implicit green approval.
 
-The shell uses a minimal hash route, appropriate for a static first pass and shareable explorer slugs. A larger catalog can replace routing without changing package contracts. No unused UI/shared/testing packages exist: tokens and icons currently belong to the application.
+The shell uses a minimal hash route, appropriate for a static first pass and shareable explorer slugs. A larger catalog can replace routing without changing package contracts. The shared application-ui package owns tokens/icons and routes. The desktop host owns native persistence, constrained commands, external documentation opening and window lifecycle. See ADR 0003 and 0004 for desktop/security/cache boundaries.

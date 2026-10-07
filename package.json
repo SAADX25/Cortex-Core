@@ -1,7 +1,7 @@
 {
   "name": "cortex-core",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "packageManager": "pnpm@10.17.0",
   "engines": {
@@ -21,7 +21,13 @@
     "data:validate": "node tools/data-import/validate.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "verify:production": "node tools/verify-production.mjs"
+    "verify:production": "node tools/verify-production.mjs",
+    "desktop:dev": "pnpm --filter @cortex/desktop dev",
+    "desktop:build": "pnpm --filter @cortex/desktop build",
+    "desktop:check": "pnpm --filter @cortex/desktop check:rust",
+    "desktop:test": "pnpm --filter @cortex/desktop test:rust",
+    "test:desktop": "node tools/desktop/smoke.mjs",
+    "desktop:package": "pnpm desktop:build && node tools/desktop/package-release.mjs"
   },
   "dependencies": {
     "@cortex/part-schema": "workspace:*",

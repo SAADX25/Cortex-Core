@@ -254,16 +254,23 @@ function Decorations({ lod }: { lod: number }) {
     </>
   );
 }
+interface CameraPose {
+  position: Vector3Tuple;
+  target: Vector3Tuple;
+  revision: number;
+}
 function Scene({
   props,
   level,
   onLevel,
   manager,
+  pose,
 }: {
   props: ExplorerRendererProps;
   level: QualityLevel;
   onLevel(level: QualityLevel): void;
   manager: AdaptiveQualityManager;
+  pose: { current: CameraPose | null };
 }) {
   const controls = useRef<ComponentRef<typeof OrbitControls>>(null);
   const { camera, gl, invalidate } = useThree();
@@ -284,6 +291,15 @@ function Scene({
     return () => canvas.removeEventListener('webglcontextlost', handleLoss);
   }, [gl, onFailure]);
   useEffect(() => {
+    // Antialias changes replace the WebGL context. Retain the user's camera
+    // unless a new explicit camera command was issued during the replacement.
+    if (pose.current?.revision === props.cameraCommand.revision) {
+      camera.position.fromArray(pose.current.position);
+      controls.current?.target.fromArray(pose.current.target);
+      controls.current?.update();
+      invalidate();
+      return;
+    }
     const selected = motherboardComponents.find((item) => item.id === props.selected);
     let target = new Vector3(0, 0.012, 0);
     let position = new Vector3(0.32, 0.4, 0.36);
@@ -337,6 +353,12 @@ function Scene({
       profile.lodBias,
     );
     if (nextLod !== lod) setLod(nextLod);
+    if (controls.current)
+      pose.current = {
+        position: camera.position.toArray() as Vector3Tuple,
+        target: controls.current.target.toArray() as Vector3Tuple,
+        revision: props.cameraCommand.revision,
+      };
     const signature = camera.position
       .toArray()
       .map((v) => v.toFixed(3))
@@ -437,6 +459,7 @@ function Scene({
 export default function ExplorerRenderer(props: ExplorerRendererProps) {
   resolveVisualTemplate(props.board);
   const manager = useMemo(() => new AdaptiveQualityManager(), []);
+  const pose = useRef<CameraPose | null>(null);
   const [autoLevel, setAutoLevel] = useState<QualityLevel>('medium');
   const level = props.quality === 'auto' ? autoLevel : props.quality;
   const profile = qualityProfiles[level];
@@ -449,7 +472,7 @@ export default function ExplorerRenderer(props: ExplorerRendererProps) {
       gl={{ antialias: profile.antialias, powerPreference: 'default' }}
       camera={{ position: [0.32, 0.4, 0.36], fov: 42, near: 0.001, far: 10 }}
     >
-      <Scene props={props} level={level} onLevel={setAutoLevel} manager={manager} />
+      <Scene props={props} level={level} onLevel={setAutoLevel} manager={manager} pose={pose} />
     </Canvas>
   );
 }

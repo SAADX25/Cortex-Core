@@ -1,0 +1,345 @@
+{
+  "schemaVersion": 1,
+  "catalogVersion": "2026.10.07.1",
+  "assetManifestVersion": 1,
+  "origin": "development-fixtures",
+  "publishedAt": "2026-10-07T00:00:00Z",
+  "parts": [
+    {
+      "id": "fixture-board-atx",
+      "manufacturer": "Cortex Lab",
+      "model": "ATX Reference / 01",
+      "slug": "cortex-atx-reference",
+      "releaseDate": null,
+      "status": "development",
+      "isFixture": true,
+      "provenance": {
+        "fixture": {
+          "organization": "Cortex Core development fixtures",
+          "verifiedAt": "2026-10-07T00:00:00Z",
+          "status": "fixture",
+          "confidence": 0
+        }
+      },
+      "createdAt": "2026-10-07T00:00:00Z",
+      "updatedAt": "2026-10-07T00:00:00Z",
+      "visual": {
+        "templateId": "motherboard.atx.v1",
+        "dimensions": {
+          "width": 244,
+          "height": 32,
+          "depth": 305,
+          "unit": "mm"
+        },
+        "materials": {
+          "pcb": "#263a35",
+          "metal": "#9aa7ac",
+          "plastic": "#20282d"
+        },
+        "textureSet": null,
+        "branding": {
+          "label": "CORTEX / ATX"
+        },
+        "connectors": [],
+        "lod": [
+          {
+            "level": 0,
+            "distance": 0
+          },
+          {
+            "level": 1,
+            "distance": 0.6
+          },
+          {
+            "level": 2,
+            "distance": 1.2
+          }
+        ],
+        "premiumAssetId": null
+      },
+      "category": "motherboard",
+      "specs": {
+        "socket": "AM5",
+        "socketType": "LGA",
+        "cpuFamilies": [
+          "Fixture Zen family"
+        ],
+        "formFactor": "ATX",
+        "chipset": "Cortex reference chipset",
+        "memoryGeneration": "DDR5",
+        "dimmSlots": 4,
+        "maxMemoryGb": 128,
+        "pcieGeneration": 4,
+        "pcieLanes": 16,
+        "m2Slots": [
+          {
+            "id": "motherboard.m2.slot1",
+            "key": "M",
+            "interfaces": [
+              "nvme"
+            ],
+            "lengthsMm": [
+              60,
+              80
+            ]
+          },
+          {
+            "id": "motherboard.m2.slot2",
+            "key": "M",
+            "interfaces": [
+              "nvme",
+              "sata"
+            ],
+            "lengthsMm": [
+              80
+            ]
+          }
+        ],
+        "sataPorts": 4
+      }
+    },
+    {
+      "id": "fixture-cpu",
+      "manufacturer": "Cortex Lab",
+      "model": "Sample 8-core CPU",
+      "slug": "sample-eight-core",
+      "releaseDate": null,
+      "status": "development",
+      "isFixture": true,
+      "provenance": {
+        "fixture": {
+          "organization": "Cortex Core development fixtures",
+          "verifiedAt": "2026-10-07T00:00:00Z",
+          "status": "fixture",
+          "confidence": 0
+        }
+      },
+      "createdAt": "2026-10-07T00:00:00Z",
+      "updatedAt": "2026-10-07T00:00:00Z",
+      "visual": {
+        "templateId": "cpu.lga.v1",
+        "dimensions": {
+          "width": 40,
+          "height": 5,
+          "depth": 40,
+          "unit": "mm"
+        },
+        "materials": {
+          "pcb": "#263a35",
+          "metal": "#9aa7ac",
+          "plastic": "#20282d"
+        },
+        "textureSet": null,
+        "branding": {
+          "label": "SAMPLE CPU"
+        },
+        "connectors": [],
+        "lod": [
+          {
+            "level": 0,
+            "distance": 0
+          },
+          {
+            "level": 1,
+            "distance": 0.6
+          },
+          {
+            "level": 2,
+            "distance": 1.2
+          }
+        ],
+        "premiumAssetId": null
+      },
+      "category": "cpu",
+      "specs": {
+        "socket": "AM5",
+        "family": "Fixture Zen family",
+        "cores": 8,
+        "tdpWatts": 65
+      }
+    },
+    {
+      "id": "fixture-ram",
+      "manufacturer": "Cortex Lab",
+      "model": "Sample DDR5 kit",
+      "slug": "sample-ddr5-kit",
+      "releaseDate": null,
+      "status": "development",
+      "isFixture": true,
+      "provenance": {
+        "fixture": {
+          "organization": "Cortex Core development fixtures",
+          "verifiedAt": "2026-10-07T00:00:00Z",
+          "status": "fixture",
+          "confidence": 0
+        }
+      },
+      "createdAt": "2026-10-07T00:00:00Z",
+      "updatedAt": "2026-10-07T00:00:00Z",
+      "visual": {
+        "templateId": "ram.dimm.v1",
+        "dimensions": {
+          "width": 133,
+          "height": 35,
+          "depth": 8,
+          "unit": "mm"
+        },
+        "materials": {
+          "pcb": "#263a35",
+          "metal": "#9aa7ac",
+          "plastic": "#20282d"
+        },
+        "textureSet": null,
+        "branding": {
+          "label": "SAMPLE DIMM"
+        },
+        "connectors": [],
+        "lod": [
+          {
+            "level": 0,
+            "distance": 0
+          },
+          {
+            "level": 1,
+            "distance": 0.6
+          },
+          {
+            "level": 2,
+            "distance": 1.2
+          }
+        ],
+        "premiumAssetId": null
+      },
+      "category": "ram",
+      "specs": {
+        "generation": "DDR5",
+        "capacityGb": 16,
+        "moduleCount": 2,
+        "speedMt": 5600
+      }
+    },
+    {
+      "id": "fixture-gpu",
+      "manufacturer": "Cortex Lab",
+      "model": "Sample PCIe GPU",
+      "slug": "sample-pcie-gpu",
+      "releaseDate": null,
+      "status": "development",
+      "isFixture": true,
+      "provenance": {
+        "fixture": {
+          "organization": "Cortex Core development fixtures",
+          "verifiedAt": "2026-10-07T00:00:00Z",
+          "status": "fixture",
+          "confidence": 0
+        }
+      },
+      "createdAt": "2026-10-07T00:00:00Z",
+      "updatedAt": "2026-10-07T00:00:00Z",
+      "visual": {
+        "templateId": "gpu.dual-fan.v1",
+        "dimensions": {
+          "width": 260,
+          "height": 120,
+          "depth": 45,
+          "unit": "mm"
+        },
+        "materials": {
+          "pcb": "#263a35",
+          "metal": "#9aa7ac",
+          "plastic": "#20282d"
+        },
+        "textureSet": null,
+        "branding": {
+          "label": "SAMPLE GPU"
+        },
+        "connectors": [],
+        "lod": [
+          {
+            "level": 0,
+            "distance": 0
+          },
+          {
+            "level": 1,
+            "distance": 0.6
+          },
+          {
+            "level": 2,
+            "distance": 1.2
+          }
+        ],
+        "premiumAssetId": null
+      },
+      "category": "gpu",
+      "specs": {
+        "pcieGeneration": 4,
+        "pcieLanes": 16,
+        "powerWatts": 180,
+        "powerConnectors": [
+          "8-pin"
+        ]
+      }
+    },
+    {
+      "id": "fixture-storage",
+      "manufacturer": "Cortex Lab",
+      "model": "Sample NVMe SSD",
+      "slug": "sample-nvme-ssd",
+      "releaseDate": null,
+      "status": "development",
+      "isFixture": true,
+      "provenance": {
+        "fixture": {
+          "organization": "Cortex Core development fixtures",
+          "verifiedAt": "2026-10-07T00:00:00Z",
+          "status": "fixture",
+          "confidence": 0
+        }
+      },
+      "createdAt": "2026-10-07T00:00:00Z",
+      "updatedAt": "2026-10-07T00:00:00Z",
+      "visual": {
+        "templateId": "storage.m2.v1",
+        "dimensions": {
+          "width": 22,
+          "height": 3,
+          "depth": 80,
+          "unit": "mm"
+        },
+        "materials": {
+          "pcb": "#263a35",
+          "metal": "#9aa7ac",
+          "plastic": "#20282d"
+        },
+        "textureSet": null,
+        "branding": {
+          "label": "SAMPLE SSD"
+        },
+        "connectors": [],
+        "lod": [
+          {
+            "level": 0,
+            "distance": 0
+          },
+          {
+            "level": 1,
+            "distance": 0.6
+          },
+          {
+            "level": 2,
+            "distance": 1.2
+          }
+        ],
+        "premiumAssetId": null
+      },
+      "category": "storage",
+      "specs": {
+        "interface": "nvme",
+        "formFactor": "M.2",
+        "key": "M",
+        "lengthMm": 80,
+        "capacityGb": 1000
+      }
+    }
+  ]
+}

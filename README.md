@@ -2,24 +2,27 @@
 
 **Foundation + Motherboard Explorer** — a typed hardware platform built around reusable visual templates. The first milestone uses five fictional development records and an original procedural ATX layout. No real product specifications or external 3D models are presented as verified hardware.
 
-## Run locally
+## Launch the desktop application
 
-Requirements: Node **24.17+ in the 24.x line**, pnpm **10.17.0**. Exact stable dependency versions are pinned in manifests and `pnpm-lock.yaml`.
+Cortex Core ships as a **Tauri 2 Windows x64 desktop application**. The unsigned development installer and standalone executable are generated under `release/windows-x64` by `pnpm desktop:package`. Installed users launch **Cortex Core.exe** or the Start menu shortcut. The installed app loads packaged assets; it needs no Node, pnpm, browser or local web server. Windows WebView2 Runtime is required; the installer includes its official bootstrapper.
+
+Developer requirements: Node **24.17+ in the 24.x line**, pnpm **10.17.0**, Rust stable **1.99+**, Visual Studio C++ build tools and Windows SDK. This machine uses an ignored project-local Rust installation in `.toolchains`; other machines use the normal Rust toolchain on PATH.
 
 ```sh
 pnpm install --frozen-lockfile
-pnpm dev
+pnpm desktop:dev
+pnpm desktop:package
 ```
 
-Open http://127.0.0.1:5173. Choose **Open Motherboard Explorer**. Orbit, zoom, pan, select any of 17 regions, inspect fixture specifications, focus/reset/fit the camera, toggle labels or exploded view, and choose an automatic/manual quality profile. A keyboard-accessible component list mirrors the model. On mobile, the inspector becomes a compact bottom sheet with a More details control. Fullscreen appears when the browser supports it.
-
-Use `/?graphics=off#/explorer` to open the diagram. WebGL initialization, context loss and rejected renderer imports also recover to that diagram. A retry after a rejected ESM import reloads the page because browsers cache failed module URLs. Development-only diagnostics are available at `/?debug=1#/explorer` and are stripped from production.
+See [desktop development, security and distribution](docs/desktop/development.md) and [desktop validation](docs/desktop/validation.md). `apps/web` is the development/browser-test renderer; `pnpm dev` serves it for tests, not for end users. Its optional `?graphics=off` and development-only `?debug=1` remain available. Motherboard selection, inspector, camera, exploded view, adaptive quality and accessible fallback share one implementation across both hosts.
 
 ## Workspace
 
 | Location                        | Ownership                                                                           |
 | ------------------------------- | ----------------------------------------------------------------------------------- |
-| `apps/web`                      | React shell, accessible inspector, routes, CSS tokens, transient Zustand state      |
+| `apps/desktop`                  | Tauri native host, SQLite snapshot, capabilities and Windows installer              |
+| `apps/web`                      | Vite development and browser-test renderer                                          |
+| `packages/application-ui`       | Shared React shell, inspector, routes, tokens, transient Zustand state              |
 | `packages/part-schema`          | Category-specific runtime schemas, types, provenance, dimensions                    |
 | `packages/compatibility-engine` | Pure reason-coded compatibility checks; missing data stays unknown                  |
 | `packages/data-access`          | Validated async repository, cursor limits, fixtures, optional Supabase reads        |
@@ -53,4 +56,4 @@ All domain tables have RLS. Public records require `is_public=true`; API roles h
 
 The explorer renders one generic motherboard template; the other four categories demonstrate domain schemas and compatibility, not independent 3D viewers. Adaptive profiles apply DPR, antialiasing, shadows and detail bias; texture/post-processing/reflection settings are reserved policy fields because this scene uses no image textures or post-processing. GLB loading and optimization are supported seams, not a catalog of downloaded assets. Installation animation, occupied-slot bookkeeping, aggregate build memory/power and exact CPU/BIOS validation are not implemented.
 
-Next: a small PC Builder slice that installs fixture CPU/RAM/M.2 parts into semantic anchors, tracks occupied slots and exposes scoped compatibility results. Validate that slice before importing real manufacturer data or premium assets.
+Next: complete Windows release hardening on clean Windows 10/11 machines, physical high-DPI/multi-monitor testing and a deliberate signing/update policy. CPU/RAM/GPU installation work remains deferred until desktop validation is stable.

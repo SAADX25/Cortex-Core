@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-record-graphics-failure"
+description = "Enables the record_graphics_failure command without any pre-configured scope."
+commands.allow = ["record_graphics_failure"]
+
+[[permission]]
+identifier = "deny-record-graphics-failure"
+description = "Denies the record_graphics_failure command without any pre-configured scope."
+commands.deny = ["record_graphics_failure"]

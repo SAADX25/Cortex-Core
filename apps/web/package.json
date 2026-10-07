@@ -9,20 +9,13 @@
     "preview": "vite preview --host 127.0.0.1"
   },
   "dependencies": {
-    "react": "19.3.0",
-    "react-dom": "19.3.0",
-    "zustand": "5.0.15",
-    "@tanstack/react-query": "5.104.1",
-    "@cortex/part-schema": "workspace:*",
-    "@cortex/compatibility-engine": "workspace:*",
-    "@cortex/data-access": "workspace:*",
-    "@cortex/asset-runtime": "workspace:*",
-    "@cortex/3d-engine": "workspace:*"
+    "@cortex/application-ui": "workspace:*"
   },
   "devDependencies": {
     "vite": "8.3.3",
     "@vitejs/plugin-react": "6.1.2",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0"
-  }
+  },
+  "description": "Development and browser-test harness for the shared Cortex Core desktop renderer"
 }

@@ -12,3 +12,8 @@ supabase/.temp/
 tools/asset-pipeline/output/
 .test-artifacts/
 .artifacts/
+.toolchains/
+**/src-tauri/target/
+**/src-tauri/gen/
+
+release/

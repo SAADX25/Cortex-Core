@@ -38,3 +38,43 @@ jobs:
             test-results/
             apps/web/dist/budget-report.json
           retention-days: 14
+  desktop-windows:
+    runs-on: windows-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.17.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24.17.0
+          cache: pnpm
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: pnpm install --frozen-lockfile
+      - run: node tools/desktop/generate-fixtures.mjs --check
+      - run: node tools/desktop/run.mjs rust-fmt
+      - run: pnpm desktop:check
+      - run: pnpm desktop:test
+      - run: pnpm desktop:build
+      - name: Install unsigned development package for smoke validation
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem -LiteralPath 'apps/desktop/src-tauri/target/release/bundle/nsis' -Filter '*-setup.exe' | Select-Object -First 1
+          $installDirectory = Join-Path $env:RUNNER_TEMP 'CortexCore-Development'
+          $process = Start-Process -FilePath $installer.FullName -ArgumentList '/S', "/D=$installDirectory" -WindowStyle Hidden -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw 'NSIS installation failed' }
+          $env:CORTEX_DESKTOP_EXE = Join-Path $installDirectory 'Cortex Core.exe'
+          pnpm test:desktop
+          if ($LASTEXITCODE -ne 0) { throw 'Native smoke validation failed' }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: cortex-core-windows-x64-unsigned-development
+          path: |
+            apps/desktop/src-tauri/target/release/bundle/nsis/*-setup.exe
+            .artifacts/desktop/*.json
+            .artifacts/desktop/*.png
+          retention-days: 14

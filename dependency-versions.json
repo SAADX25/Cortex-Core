@@ -23,5 +23,13 @@
   "@supabase/supabase-js": "2.117.3",
   "@gltf-transform/cli": "4.5.1",
   "@electric-sql/pglite": "0.5.8",
-  "prettier": "3.9.9"
+  "prettier": "3.9.9",
+  "@tauri-apps/api": "2.12.1",
+  "@tauri-apps/cli": "2.12.1",
+  "rust-stable": "1.99.0",
+  "tauri": "2.12.1",
+  "tauri-build": "2.7.1",
+  "tauri-plugin-window-state": "2.5.0",
+  "tauri-plugin-opener": "2.7.0",
+  "rusqlite": "0.40.2"
 }

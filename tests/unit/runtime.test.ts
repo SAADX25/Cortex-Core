@@ -14,7 +14,7 @@ import {
   motherboardComponents,
   qualityProfiles,
 } from '@cortex/3d-engine';
-import { useViewerStore } from '../../apps/web/src/viewer/store';
+import { useViewerStore } from '../../packages/application-ui/src/viewer/store';
 
 describe('asset manifests and templates', () => {
   it('validates all original templates', () =>

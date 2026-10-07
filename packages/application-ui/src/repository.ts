@@ -1,9 +1,17 @@
 import { fixtureRepository, type PartRepository } from '@cortex/data-access';
+import { isDesktop, loadDesktopSnapshot, markCatalogFallback } from './platform';
+import { createSnapshotRepository } from '@cortex/data-access/snapshot';
 let repositoryPromise: Promise<PartRepository> | null = null;
 export function getRepository(): Promise<PartRepository> {
   if (!repositoryPromise)
-    repositoryPromise =
-      import.meta.env.VITE_DATA_SOURCE === 'supabase'
+    repositoryPromise = isDesktop
+      ? loadDesktopSnapshot()
+          .then(createSnapshotRepository)
+          .catch(() => {
+            markCatalogFallback();
+            return fixtureRepository;
+          })
+      : import.meta.env.VITE_DATA_SOURCE === 'supabase'
         ? import('@cortex/data-access/supabase').then(({ createSupabaseRepository }) =>
             createSupabaseRepository(
               import.meta.env.VITE_SUPABASE_URL ?? '',

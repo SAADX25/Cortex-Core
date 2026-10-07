@@ -1,0 +1,204 @@
+mod catalog;
+use serde::Serialize;
+use std::{fs, io::Write, path::PathBuf, sync::Mutex};
+use tauri::Manager;
+use tauri_plugin_opener::OpenerExt;
+use tauri_plugin_window_state::{AppHandleExt, StateFlags};
+
+struct DesktopState {
+    snapshot: catalog::Snapshot,
+    cache_status: String,
+    log_dir: PathBuf,
+    logged_failure: Mutex<bool>,
+}
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DesktopStatus {
+    app_version: String,
+    catalog_version: String,
+    asset_manifest_version: u32,
+    catalog_origin: String,
+    cache_status: String,
+    offline_ready: bool,
+    asset_cache_bytes: u64,
+    fullscreen: bool,
+    scale_factor: f64,
+    window_width: u32,
+    window_height: u32,
+    packaged: bool,
+}
+#[tauri::command]
+fn load_catalog_snapshot(state: tauri::State<DesktopState>) -> catalog::Snapshot {
+    state.snapshot.clone()
+}
+#[tauri::command]
+fn desktop_status(
+    window: tauri::WebviewWindow,
+    state: tauri::State<DesktopState>,
+) -> Result<DesktopStatus, String> {
+    let size = window.inner_size().map_err(|_| "Window size unavailable")?;
+    Ok(DesktopStatus {
+        app_version: env!("CARGO_PKG_VERSION").into(),
+        catalog_version: state.snapshot.catalog_version.clone(),
+        asset_manifest_version: state.snapshot.asset_manifest_version,
+        catalog_origin: state.snapshot.origin.clone(),
+        cache_status: state.cache_status.clone(),
+        offline_ready: true,
+        asset_cache_bytes: 0,
+        fullscreen: window.is_fullscreen().unwrap_or(false),
+        scale_factor: window.scale_factor().unwrap_or(1.0),
+        window_width: size.width,
+        window_height: size.height,
+        packaged: matches!(
+            window
+                .url()
+                .map_err(|_| "Window URL unavailable")?
+                .host_str(),
+            Some("tauri.localhost")
+        ) || window.url().map_err(|_| "Window URL unavailable")?.scheme() == "tauri",
+    })
+}
+#[tauri::command]
+fn set_viewer_fullscreen(window: tauri::WebviewWindow, enabled: bool) -> Result<bool, String> {
+    window
+        .set_fullscreen(enabled)
+        .map_err(|_| "Fullscreen could not be changed")?;
+    window.set_focus().map_err(|_| "Viewer focus unavailable")?;
+    Ok(enabled)
+}
+#[tauri::command]
+fn record_graphics_failure(code: &str, state: tauri::State<DesktopState>) -> Result<(), String> {
+    if !["unsupported-webgl2", "context-lost", "renderer-load-failed"].contains(&code) {
+        return Err("Unsupported diagnostic code".into());
+    }
+    let mut logged = state
+        .logged_failure
+        .lock()
+        .map_err(|_| "Diagnostics unavailable")?;
+    if *logged {
+        return Ok(());
+    }
+    let path = state.log_dir.join("graphics-support.log");
+    if fs::metadata(&path)
+        .map(|m| m.len() > 65536)
+        .unwrap_or(false)
+    {
+        fs::write(&path, b"").map_err(|_| "Cannot rotate support log")?;
+    }
+    let mut file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .map_err(|_| "Cannot write support log")?;
+    writeln!(
+        file,
+        "app={} platform={} graphics={} renderer=WebGL2",
+        env!("CARGO_PKG_VERSION"),
+        std::env::consts::OS,
+        code
+    )
+    .map_err(|_| "Cannot write support log")?;
+    *logged = true;
+    Ok(())
+}
+#[tauri::command]
+fn open_documentation(key: &str, app: tauri::AppHandle) -> Result<(), String> {
+    let url = match key {
+        "tauri" => "https://v2.tauri.app/",
+        "hardware-sources" => "https://www.khronos.org/gltf/",
+        _ => return Err("Unrecognized documentation key".into()),
+    };
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|_| "Cannot open default browser".to_string())
+}
+pub fn run() {
+    let flags = StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED;
+    tauri::Builder::default()
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(flags)
+                .build(),
+        )
+        .plugin(tauri_plugin_opener::init())
+        .setup(|app| {
+            let config = app.path().app_config_dir()?;
+            let data = app.path().app_local_data_dir()?.join("catalog");
+            let cache = app.path().app_cache_dir()?;
+            let log = app.path().app_log_dir()?;
+            for directory in [
+                &config,
+                &data,
+                &cache.join("assets"),
+                &cache.join("temp"),
+                &log,
+            ] {
+                fs::create_dir_all(directory)?;
+            }
+            let cached = rusqlite::Connection::open(data.join("catalog.sqlite3"))
+                .map_err(|_| "Cannot open catalog cache".to_string())
+                .and_then(|mut db| catalog::load(&mut db));
+            let (snapshot, cache_status) = match cached {
+                Ok(snapshot) => (snapshot, "local-snapshot".into()),
+                Err(_) => (
+                    catalog::parse_snapshot(catalog::BUNDLED)?,
+                    "bundled-fallback".into(),
+                ),
+            };
+            app.manage(DesktopState {
+                snapshot,
+                cache_status,
+                log_dir: log,
+                logged_failure: Mutex::new(false),
+            });
+            let window =
+                tauri::WebviewWindowBuilder::from_config(app, &app.config().app.windows[0])?
+                    .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny)
+                    .on_navigation(|url| {
+                        if cfg!(debug_assertions)
+                            && url.host_str() == Some("127.0.0.1")
+                            && url.port() == Some(5173)
+                        {
+                            return true;
+                        }
+                        url.scheme() == "tauri"
+                            || (url.host_str() == Some("tauri.localhost")
+                                && ["http", "https"].contains(&url.scheme()))
+                    })
+                    .build()?;
+            // Restore is performed by the plugin on creation; recover a disconnected-monitor position.
+            if let (Ok(position), Ok(monitors)) =
+                (window.outer_position(), window.available_monitors())
+            {
+                let reachable = monitors.iter().any(|m| {
+                    let p = m.position();
+                    let s = m.size();
+                    position.x + 100 > p.x
+                        && position.y + 50 > p.y
+                        && position.x < p.x + s.width as i32
+                        && position.y < p.y + s.height as i32
+                });
+                if !reachable {
+                    window.center()?;
+                }
+            }
+            window.show()?;
+            Ok(())
+        })
+        .on_window_event(move |window, event| {
+            if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                // Persist normal/maximized geometry, never an accidental fullscreen launch state.
+                let _ = window.set_fullscreen(false);
+                let _ = window.app_handle().save_window_state(flags);
+            }
+        })
+        .invoke_handler(tauri::generate_handler![
+            load_catalog_snapshot,
+            desktop_status,
+            set_viewer_fullscreen,
+            record_graphics_failure,
+            open_documentation
+        ])
+        .run(tauri::generate_context!())
+        .expect("Cortex Core desktop runtime could not start");
+}

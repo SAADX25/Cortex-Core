@@ -5,6 +5,12 @@ export default tseslint.config(
   {
     ignores: [
       '**/dist/**',
+      '.toolchains/**',
+      '**/src-tauri/target/**',
+      '**/src-tauri/gen/**',
+      '.artifacts/**',
+      '.test-artifacts/**',
+      'release/**',
       '**/node_modules/**',
       'playwright-report/**',
       'test-results/**',

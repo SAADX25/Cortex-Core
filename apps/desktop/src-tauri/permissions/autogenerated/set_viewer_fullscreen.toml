@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-viewer-fullscreen"
+description = "Enables the set_viewer_fullscreen command without any pre-configured scope."
+commands.allow = ["set_viewer_fullscreen"]
+
+[[permission]]
+identifier = "deny-set-viewer-fullscreen"
+description = "Denies the set_viewer_fullscreen command without any pre-configured scope."
+commands.deny = ["set_viewer_fullscreen"]

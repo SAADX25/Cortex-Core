@@ -1,0 +1,12 @@
+fn main() {
+    tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
+        tauri_build::AppManifest::new().commands(&[
+            "load_catalog_snapshot",
+            "desktop_status",
+            "set_viewer_fullscreen",
+            "record_graphics_failure",
+            "open_documentation",
+        ]),
+    ))
+    .expect("Tauri build configuration is invalid");
+}

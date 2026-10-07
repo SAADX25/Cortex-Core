@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./supabase": "./src/supabase.ts"
+    "./supabase": "./src/supabase.ts",
+    "./snapshot": "./src/snapshot.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "2.117.3",

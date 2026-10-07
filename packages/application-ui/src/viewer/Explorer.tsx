@@ -9,6 +9,7 @@ import ComponentList from './ComponentList';
 import InfoPanel from './InfoPanel';
 import FallbackDiagram from './FallbackDiagram';
 import { Icon } from '../icons';
+import { isDesktop, setDesktopFullscreen, recordGraphicsFailure } from '../platform';
 
 function useReducedMotion() {
   const [reduced, setReduced] = useState(
@@ -42,6 +43,7 @@ export default function Explorer({ board }: { board: Motherboard }) {
   }, [attempt]);
   const [metrics, setMetrics] = useState<SceneMetrics | null>(null);
   const [notice, setNotice] = useState('');
+  const [nativeFullscreen, setNativeFullscreen] = useState(false);
   const viewport = useRef<HTMLDivElement>(null);
   const diagnostics = import.meta.env.DEV && new URLSearchParams(location.search).has('debug');
   const onFailure = useCallback(() => setGraphics('failed'), []);
@@ -51,6 +53,27 @@ export default function Explorer({ board }: { board: Motherboard }) {
     [],
   );
   useEffect(() => () => useViewerStore.getState().clear(), [board.id]);
+  useEffect(() => {
+    if (graphics === 'unsupported') recordGraphicsFailure('unsupported-webgl2');
+    if (graphics === 'failed') recordGraphicsFailure('context-lost');
+    if (graphics === 'load-failed') recordGraphicsFailure('renderer-load-failed');
+  }, [graphics]);
+  useEffect(() => {
+    if (!nativeFullscreen) return;
+    const exit = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') void setDesktopFullscreen(false).then(setNativeFullscreen);
+    };
+    window.addEventListener('keydown', exit);
+    return () => {
+      window.removeEventListener('keydown', exit);
+    };
+  }, [nativeFullscreen]);
+  useEffect(
+    () => () => {
+      if (isDesktop) void setDesktopFullscreen(false);
+    },
+    [],
+  );
   const fallback = (
     <FallbackDiagram selected={state.selected} onSelect={state.select} exploded={state.exploded} />
   );
@@ -64,10 +87,13 @@ export default function Explorer({ board }: { board: Motherboard }) {
   };
   const fullscreen = async () => {
     try {
-      if (document.fullscreenElement) await document.exitFullscreen();
+      if (isDesktop) {
+        setNativeFullscreen(await setDesktopFullscreen(!nativeFullscreen));
+        viewport.current?.focus();
+      } else if (document.fullscreenElement) await document.exitFullscreen();
       else await viewport.current?.requestFullscreen();
     } catch {
-      setNotice('Fullscreen is unavailable in this browser.');
+      setNotice('Fullscreen could not be changed.');
     }
   };
   return (
@@ -93,8 +119,9 @@ export default function Explorer({ board }: { board: Motherboard }) {
       <div className="explorer-workspace">
         <ComponentList />
         <section
-          className="viewport"
+          className={`viewport ${nativeFullscreen ? 'viewer-fullscreen' : ''}`}
           ref={viewport}
+          tabIndex={-1}
           aria-label="Interactive motherboard viewer"
           data-testid="viewport"
           data-exploded={state.exploded}
@@ -246,7 +273,7 @@ export default function Explorer({ board }: { board: Motherboard }) {
             >
               <Icon name="grid" />
             </button>
-            {document.fullscreenEnabled && (
+            {(isDesktop || document.fullscreenEnabled) && (
               <button
                 className="tool-button"
                 onClick={() => void fullscreen()}

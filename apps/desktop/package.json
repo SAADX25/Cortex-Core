@@ -1,0 +1,15 @@
+{
+  "name": "@cortex/desktop",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "scripts": {
+    "dev": "node ../../tools/desktop/run.mjs dev",
+    "build": "node ../../tools/desktop/run.mjs build",
+    "check:rust": "node ../../tools/desktop/run.mjs rust-check",
+    "test:rust": "node ../../tools/desktop/run.mjs rust-test"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "2.12.1"
+  }
+}
