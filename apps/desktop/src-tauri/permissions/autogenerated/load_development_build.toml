@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-load-development-build"
+description = "Enables the load_development_build command without any pre-configured scope."
+commands.allow = ["load_development_build"]
+
+[[permission]]
+identifier = "deny-load-development-build"
+description = "Denies the load_development_build command without any pre-configured scope."
+commands.deny = ["load_development_build"]

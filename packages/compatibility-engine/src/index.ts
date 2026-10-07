@@ -234,3 +234,110 @@ export function summarizeCompatibility(results: CompatibilityResult[]): Compatib
     if (results.some((r) => r.status === status)) return status;
   return 'compatible';
 }
+
+/** Destination-specific assembly rules. A RAM install means one module, not an entire kit. */
+export function checkInstallation(
+  board: Motherboard,
+  part: Part,
+  context: {
+    slotId: string;
+    occupied: boolean;
+    memoryGb: number | null;
+  },
+): CompatibilityResult[] {
+  const { slotId, occupied, memoryGb } = context;
+  const expected =
+    slotId === 'motherboard.cpuSocket'
+      ? 'cpu'
+      : /^motherboard\.dimm\.(a1|a2|b1|b2)$/.test(slotId)
+        ? 'ram'
+        : /^motherboard\.m2\.slot[12]$/.test(slotId)
+          ? 'storage'
+          : null;
+  const occupancy = result(
+    'slot.occupancy',
+    occupied ? 'incompatible' : 'compatible',
+    occupied ? 'slot-occupied' : 'slot-empty',
+    occupied ? 'Slot is occupied. Use Replace explicitly.' : 'Slot is empty.',
+    board,
+    part,
+  );
+  if (expected !== part.category || expected === null)
+    return [
+      result(
+        'slot.type',
+        'incompatible',
+        'invalid-destination',
+        'This component cannot be installed in this destination.',
+        board,
+        part,
+      ),
+      occupancy,
+    ];
+  if (part.category === 'cpu') return [...checkCompatibility(board, part), occupancy];
+  if (part.category === 'ram') {
+    const index = ['a1', 'a2', 'b1', 'b2'].indexOf(slotId.split('.').at(-1) ?? '');
+    const capacity =
+      board.specs.maxMemoryGb === null ||
+      board.specs.dimmSlots === null ||
+      part.specs.capacityGb === null ||
+      memoryGb === null
+        ? missing('ram.installed-capacity', board, part)
+        : result(
+            'ram.installed-capacity',
+            index < board.specs.dimmSlots &&
+              memoryGb + part.specs.capacityGb <= board.specs.maxMemoryGb
+              ? 'compatible'
+              : 'incompatible',
+            'memory-capacity-and-slots',
+            'Checks the selected DIMM and total installed memory against the board limit.',
+            board,
+            part,
+          );
+    return [checkCompatibility(board, part)[0]!, capacity, occupancy];
+  }
+  if (part.category === 'storage') {
+    const slot = board.specs.m2Slots.find((s) => s.id === slotId);
+    const form =
+      part.specs.formFactor === null ||
+      part.specs.interface === null ||
+      part.specs.lengthMm === null
+        ? missing('storage.assembly-form', board, part)
+        : result(
+            'storage.assembly-form',
+            part.specs.formFactor === 'M.2' &&
+              part.specs.interface === 'nvme' &&
+              part.specs.lengthMm === 80
+              ? 'compatible'
+              : 'incompatible',
+            'm2-2280-nvme',
+            'This assembly template supports M.2 2280 NVMe devices.',
+            board,
+            part,
+          );
+    return [
+      form,
+      slot
+        ? storageSlot(board, part, slot)
+        : result(
+            'storage.slot',
+            'incompatible',
+            'slot-unavailable',
+            'This M.2 slot is unavailable on the selected board.',
+            board,
+            part,
+          ),
+      occupancy,
+    ];
+  }
+  return [
+    result(
+      'category',
+      'incompatible',
+      'unsupported-category',
+      'Assembly is unavailable for this category.',
+      board,
+      part,
+    ),
+  ];
+}

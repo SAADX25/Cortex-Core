@@ -1,6 +1,6 @@
 [package]
 name = "cortex-core-desktop"
-version = "0.2.0"
+version = "0.3.0"
 description = "Cortex Core Desktop Foundation"
 authors = ["Cortex Core contributors"]
 edition = "2024"

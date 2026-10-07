@@ -4,6 +4,7 @@ import { Grid, Html, OrbitControls } from '@react-three/drei';
 import { Group, InstancedMesh, Matrix4, Vector3 } from 'three';
 import type { Motherboard } from '@cortex/part-schema';
 import { resolveVisualTemplate } from '@cortex/asset-runtime';
+import InstalledComponents, { type AssemblyScene } from './InstalledComponents';
 import {
   motherboardComponents,
   type CameraAction,
@@ -27,6 +28,14 @@ const sceneColors = {
   capacitor: '#75878b',
 };
 export interface SceneMetrics {
+  materials: number;
+  installedVisuals: {
+    slotId: string;
+    partId: string;
+    phase: string;
+    position: number[];
+    rotation: number[];
+  }[];
   fps: number;
   frameMs: number;
   calls: number;
@@ -38,6 +47,7 @@ export interface SceneMetrics {
   projections: Record<string, [number, number]>;
 }
 export interface ExplorerRendererProps {
+  assembly?: AssemblyScene;
   board: Motherboard;
   selected: ComponentId | null;
   hovered: ComponentId | null;
@@ -84,7 +94,13 @@ function Region({
   const group = useRef<Group>(null);
   const { invalidate } = useThree();
   const selected = props.selected === d.id;
+  const valid = props.assembly?.validSlots.some((id) => id === d.id);
   const active = selected || props.hovered === d.id;
+  const highlight = valid
+    ? props.assembly?.preview?.slotId === d.id
+      ? '#94cabb'
+      : '#5f9585'
+    : sceneColors.accent;
   const y = (d.position[1] + (props.exploded ? d.explode : 0)) / 1000;
   useLayoutEffect(() => {
     if (group.current && props.reducedMotion) group.current.position.y = y;
@@ -135,9 +151,9 @@ function Region({
       <mesh castShadow receiveShadow>
         <boxGeometry args={size} />
         <meshStandardMaterial
-          color={active ? sceneColors.accent : color}
-          emissive={active ? sceneColors.accent : '#000000'}
-          emissiveIntensity={active ? 0.13 : 0}
+          color={valid || active ? highlight : color}
+          emissive={valid || active ? highlight : '#000000'}
+          emissiveIntensity={valid || active ? 0.13 : 0}
           roughness={d.kind === 'board' ? 0.85 : 0.5}
           metalness={['heatsink', 'io'].includes(d.kind) ? 0.7 : 0.18}
         />
@@ -194,7 +210,7 @@ function Region({
       {d.kind === 'heatsink' && (
         <RepeatedBoxes items={fins} color={active ? sceneColors.accent : '#4b595d'} />
       )}
-      {d.kind === 'm2' && (
+      {d.kind === 'm2' && !props.assembly?.installations.some((i) => i.slotId === d.id) && (
         <mesh position={[0, 0.003, 0]}>
           <boxGeometry args={[size[0] * 0.9, 0.001, size[2] * 0.66]} />
           <meshStandardMaterial
@@ -273,7 +289,7 @@ function Scene({
   pose: { current: CameraPose | null };
 }) {
   const controls = useRef<ComponentRef<typeof OrbitControls>>(null);
-  const { camera, gl, invalidate } = useThree();
+  const { camera, gl, invalidate, scene } = useThree();
   const [lod, setLod] = useState(1);
   const lastFrame = useRef(0);
   const lastMetrics = useRef(0);
@@ -369,7 +385,26 @@ function Scene({
     ) {
       lastMetrics.current = now;
       lastCamera.current = signature;
+      const materials = new Set<string>();
+      const installedVisuals: SceneMetrics['installedVisuals'] = [];
+      scene.traverse((object) => {
+        if ('material' in object) {
+          const value = object.material as { uuid: string } | { uuid: string }[];
+          for (const material of Array.isArray(value) ? value : [value])
+            materials.add(material.uuid);
+        }
+        if (object.userData.partId)
+          installedVisuals.push({
+            slotId: object.userData.semanticId,
+            partId: object.userData.partId,
+            phase: object.userData.phase,
+            position: object.position.toArray(),
+            rotation: [object.rotation.x, object.rotation.y, object.rotation.z],
+          });
+      });
       props.onMetrics({
+        materials: materials.size,
+        installedVisuals,
         fps: gap > 0 && gap < 100 ? Math.round(1000 / gap) : 0,
         frameMs: gap < 100 ? Math.round(gap * 10) / 10 : 0,
         calls: state.gl.info.render.calls,
@@ -421,6 +456,14 @@ function Scene({
           <Region key={descriptor.id} descriptor={descriptor} props={props} />
         ))}
         <Decorations lod={lod} />
+        {props.assembly && (
+          <InstalledComponents
+            assembly={props.assembly}
+            reducedMotion={props.reducedMotion}
+            exploded={props.exploded}
+            onSelect={props.onSelect}
+          />
+        )}
       </group>
       <Grid
         position={[0, -0.013, 0]}

@@ -354,3 +354,216 @@
     font-size: 29px;
   }
 }
+
+.build-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 14px 18px;
+  margin-bottom: 14px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.summary-values {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr 1fr 1fr;
+  gap: 20px;
+  flex: 1;
+}
+.summary-values small {
+  display: block;
+  font: 8px var(--mono);
+  color: var(--faint);
+  margin-bottom: 7px;
+}
+.summary-values strong {
+  font-size: 11px;
+  font-weight: 500;
+}
+.inspector-stack {
+  min-width: 0;
+  overflow: auto;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+}
+.inspector-tabs {
+  display: flex;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+}
+.inspector-tabs button {
+  flex: 1;
+  padding: 12px;
+  color: var(--muted);
+}
+.inspector-tabs button[aria-pressed='true'] {
+  color: var(--accent);
+  border-bottom: 2px solid var(--accent);
+}
+.assembly-panel {
+  padding: 18px;
+}
+.assembly-panel h2 {
+  font-size: 19px;
+  margin: 8px 0 18px;
+}
+.assembly-panel h3 {
+  font-size: 13px;
+  margin: 16px 0 8px;
+}
+.assembly-part-label {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--muted);
+}
+.assembly-part-label select {
+  width: 100%;
+  padding: 9px;
+  background: var(--raised);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+.assembly-panel .muted {
+  font-size: 10px;
+}
+.assembly-panel .spec-list {
+  margin: 12px 0;
+  font-size: 11px;
+}
+.assembly-note {
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.7;
+  margin: 12px 0;
+}
+.destinations {
+  display: grid;
+  gap: 6px;
+  margin: 14px 0;
+}
+.destinations button {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px;
+  border: 1px solid #5f958566;
+  color: #9bc2b4;
+  border-radius: 4px;
+  font-size: 11px;
+}
+.destinations button:disabled {
+  color: var(--muted);
+  border-color: var(--border);
+  cursor: default;
+}
+.destinations button[aria-pressed='true'] {
+  background: #5f95852b;
+  border-color: #94cabb;
+}
+.destinations small {
+  font-size: 9px;
+}
+.camera-assist {
+  display: flex;
+  gap: 8px;
+  font-size: 10px;
+  line-height: 1.6;
+}
+.assembly-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 10px;
+}
+.assembly-actions .button,
+.assembly-panel > .button {
+  padding: 9px 11px;
+  font-size: 10px;
+}
+.assembly-checks p {
+  font-size: 10px;
+  color: var(--muted);
+  line-height: 1.65;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.assembly-checks strong {
+  color: var(--text);
+  font-weight: 500;
+}
+.installed-row {
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: 11px;
+}
+.occupancy {
+  margin-top: 18px;
+  font-size: 10px;
+  color: var(--muted);
+}
+.occupancy summary {
+  cursor: pointer;
+  color: var(--text);
+}
+.occupancy div {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+}
+.reset-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: #0009;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+.reset-dialog {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 28px;
+  max-width: 450px;
+}
+.reset-dialog h2 {
+  margin-bottom: 16px;
+  font-size: 20px;
+}
+.reset-dialog p {
+  line-height: 1.8;
+  color: var(--muted);
+  font-size: 12px;
+}
+@media (min-width: 961px) {
+  .desktop-shell .explorer-workspace {
+    grid-template-columns: 160px minmax(260px, 1fr) 280px;
+    height: calc(100vh - 320px);
+    min-height: 360px;
+  }
+  .inspector-stack .info-panel {
+    border: 0;
+    overflow: visible;
+  }
+}
+@media (max-width: 960px) {
+  .build-summary {
+    flex-wrap: wrap;
+  }
+  .summary-values {
+    grid-template-columns: 1fr 1fr;
+  }
+  .inspector-stack {
+    grid-column: 1/-1;
+    border: 1px solid var(--border);
+  }
+}

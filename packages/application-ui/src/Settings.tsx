@@ -13,7 +13,7 @@ export default function Settings() {
       <h1>Settings</h1>
       <section className="settings-section">
         <h2>Cortex Core Desktop</h2>
-        <p className="muted">Version 0.2.0 · Unsigned development build</p>
+        <p className="muted">Version {version} · Unsigned development build</p>
         <dl className="spec-list">
           <div>
             <dt>Runtime</dt>
@@ -84,3 +84,4 @@ export default function Settings() {
     </main>
   );
 }
+import { version } from '../../../package.json';

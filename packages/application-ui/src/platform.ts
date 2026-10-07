@@ -15,6 +15,9 @@ export interface DesktopStatus {
   packaged: boolean;
 }
 export const loadDesktopSnapshot = () => invoke<unknown>('load_catalog_snapshot');
+export const loadDesktopBuild = () => invoke<unknown>('load_development_build');
+export const saveDesktopBuild = (build: unknown) =>
+  invoke<void>('save_development_build', { build });
 let rendererCatalogFallback = false;
 export const markCatalogFallback = () => {
   rendererCatalogFallback = true;

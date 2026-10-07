@@ -1,4 +1,4 @@
-import { motherboardComponents } from '@cortex/3d-engine';
+import { motherboardComponents, type ComponentId } from '@cortex/3d-engine';
 import { useViewerStore } from './store';
 import { Icon, type IconName } from '../icons';
 const icons: Record<string, IconName> = {
@@ -11,7 +11,7 @@ const icons: Record<string, IconName> = {
   power: 'chip',
   io: 'grid',
 };
-export default function ComponentList() {
+export default function ComponentList({ onSelect }: { onSelect?: (id: ComponentId) => void }) {
   const selected = useViewerStore((s) => s.selected);
   const select = useViewerStore((s) => s.select);
   return (
@@ -25,7 +25,7 @@ export default function ComponentList() {
             key={component.id}
             className={selected === component.id ? 'component-button active' : 'component-button'}
             aria-pressed={selected === component.id}
-            onClick={() => select(component.id)}
+            onClick={() => (onSelect ?? select)(component.id)}
           >
             <Icon name={icons[component.kind] ?? 'box'} size={16} />
             <span>{component.label}</span>

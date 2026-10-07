@@ -25,6 +25,7 @@ const development = process.argv.includes('--development');
 const attach = process.env.CORTEX_CDP_URL;
 const port = Number(process.env.CORTEX_CDP_PORT ?? 9224);
 const output = resolve('.artifacts/desktop');
+const { version } = JSON.parse(await readFile(resolve('package.json'), 'utf8'));
 await mkdir(output, { recursive: true });
 const executable =
   process.env.CORTEX_DESKTOP_EXE ??
@@ -87,12 +88,19 @@ try {
   await page.getByRole('link', { name: 'Cortex Core home', exact: true }).click();
   await expect(page.getByRole('heading', { name: /Your hardware workspace/ })).toBeVisible();
   const status = await invoke('desktop_status');
+  assert.equal(status.appVersion, version);
   assert.equal(status.packaged, !development);
   assert.equal(status.offlineReady, true);
   assert.equal(status.catalogVersion, '2026.10.07.1');
   assert.equal(status.cacheStatus, 'local-snapshot');
   assert(!page.url().includes('127.0.0.1') || development);
   check(development ? 'Tauri dev launch' : 'Packaged native launch without a frontend server');
+  await page.getByRole('link', { name: 'Settings', exact: true }).click();
+  await expect(
+    page.getByText(`Version ${version} · Unsigned development build`, { exact: true }),
+  ).toBeVisible();
+  await page.getByRole('link', { name: 'Cortex Core home', exact: true }).click();
+  check('Shared Settings version label agrees with native package version');
   const savedState = await readFile(
     resolve(process.env.APPDATA, 'dev.cortexcore.desktop/.window-state.json'),
     'utf8',

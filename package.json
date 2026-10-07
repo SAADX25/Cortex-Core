@@ -1,7 +1,7 @@
 {
   "name": "cortex-core",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "packageManager": "pnpm@10.17.0",
   "engines": {
@@ -26,7 +26,7 @@
     "desktop:build": "pnpm --filter @cortex/desktop build",
     "desktop:check": "pnpm --filter @cortex/desktop check:rust",
     "desktop:test": "pnpm --filter @cortex/desktop test:rust",
-    "test:desktop": "node tools/desktop/smoke.mjs",
+    "test:desktop": "node tools/desktop/smoke.mjs && node tools/desktop/assembly-smoke.mjs",
     "desktop:package": "pnpm desktop:build && node tools/desktop/package-release.mjs"
   },
   "dependencies": {

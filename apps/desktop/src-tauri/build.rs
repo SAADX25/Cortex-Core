@@ -6,6 +6,8 @@ fn main() {
             "set_viewer_fullscreen",
             "record_graphics_failure",
             "open_documentation",
+            "load_development_build",
+            "save_development_build",
         ]),
     ))
     .expect("Tauri build configuration is invalid");

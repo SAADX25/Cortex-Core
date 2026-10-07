@@ -1,0 +1,14 @@
+{
+  "name": "@cortex/build-domain",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@cortex/part-schema": "workspace:*",
+    "@cortex/compatibility-engine": "workspace:*",
+    "zod": "4.6.5"
+  }
+}

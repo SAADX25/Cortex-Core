@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-save-development-build"
+description = "Enables the save_development_build command without any pre-configured scope."
+commands.allow = ["save_development_build"]
+
+[[permission]]
+identifier = "deny-save-development-build"
+description = "Denies the save_development_build command without any pre-configured scope."
+commands.deny = ["save_development_build"]

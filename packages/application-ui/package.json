@@ -1,7 +1,7 @@
 {
   "name": "@cortex/application-ui",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "exports": {
     ".": "./src/App.tsx",
@@ -18,7 +18,8 @@
     "@cortex/data-access": "workspace:*",
     "@cortex/asset-runtime": "workspace:*",
     "@cortex/3d-engine": "workspace:*",
-    "@tauri-apps/api": "2.12.1"
+    "@tauri-apps/api": "2.12.1",
+    "@cortex/build-domain": "workspace:*"
   },
   "devDependencies": {
     "@types/react": "19.3.0",

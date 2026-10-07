@@ -1,6 +1,6 @@
 # Cortex Core
 
-**Foundation + Motherboard Explorer** — a typed hardware platform built around reusable visual templates. The first milestone uses five fictional development records and an original procedural ATX layout. No real product specifications or external 3D models are presented as verified hardware.
+**Desktop assembly foundation — Phase 2** — a typed hardware platform built around reusable visual templates. This milestone uses five fictional development records and an original procedural ATX layout. No real product specifications or external 3D models are presented as verified hardware.
 
 ## Launch the desktop application
 
@@ -14,22 +14,23 @@ pnpm desktop:dev
 pnpm desktop:package
 ```
 
-See [desktop development, security and distribution](docs/desktop/development.md) and [desktop validation](docs/desktop/validation.md). `apps/web` is the development/browser-test renderer; `pnpm dev` serves it for tests, not for end users. Its optional `?graphics=off` and development-only `?debug=1` remain available. Motherboard selection, inspector, camera, exploded view, adaptive quality and accessible fallback share one implementation across both hosts.
+See [desktop development, security and distribution](docs/desktop/development.md) [Phase 2 assembly](docs/desktop/assembly.md), and [Phase 2 validation](docs/desktop/phase-2-validation.md). `apps/web` is the development/browser-test renderer; `pnpm dev` serves it for tests, not for end users. Its optional `?graphics=off` and development-only `?debug=1` remain available. Motherboard selection, inspector, camera, exploded view, adaptive quality and accessible fallback share one implementation across both hosts.
 
 ## Workspace
 
-| Location                        | Ownership                                                                           |
-| ------------------------------- | ----------------------------------------------------------------------------------- |
-| `apps/desktop`                  | Tauri native host, SQLite snapshot, capabilities and Windows installer              |
-| `apps/web`                      | Vite development and browser-test renderer                                          |
-| `packages/application-ui`       | Shared React shell, inspector, routes, tokens, transient Zustand state              |
-| `packages/part-schema`          | Category-specific runtime schemas, types, provenance, dimensions                    |
-| `packages/compatibility-engine` | Pure reason-coded compatibility checks; missing data stays unknown                  |
-| `packages/data-access`          | Validated async repository, cursor limits, fixtures, optional Supabase reads        |
-| `packages/asset-runtime`        | Licensing manifests, template registry, integrity-checked GLB loader, leases        |
-| `packages/3d-engine`            | Semantic layout, demand renderer, camera, quality policy, reusable LOD              |
-| `tools`                         | Licensed GLB optimization, validated imports, generated fixture seed, build budgets |
-| `supabase`                      | Normalized migration, development seed, pgTAP security checks                       |
+| Location                        | Ownership                                                                              |
+| ------------------------------- | -------------------------------------------------------------------------------------- |
+| `apps/desktop`                  | Tauri native host, SQLite snapshot, capabilities and Windows installer                 |
+| `apps/web`                      | Vite development and browser-test renderer                                             |
+| `packages/application-ui`       | Shared React shell, inspector, routes, tokens, transient Zustand state                 |
+| `packages/build-domain`         | Immutable development build, slot occupancy, operations, totals and version validation |
+| `packages/part-schema`          | Category-specific runtime schemas, types, provenance, dimensions                       |
+| `packages/compatibility-engine` | Pure reason-coded compatibility checks; missing data stays unknown                     |
+| `packages/data-access`          | Validated async repository, cursor limits, fixtures, optional Supabase reads           |
+| `packages/asset-runtime`        | Licensing manifests, template registry, integrity-checked GLB loader, leases           |
+| `packages/3d-engine`            | Semantic layout, demand renderer, camera, quality policy, reusable LOD                 |
+| `tools`                         | Licensed GLB optimization, validated imports, generated fixture seed, build budgets    |
+| `supabase`                      | Normalized migration, development seed, pgTAP security checks                          |
 
 See [architecture](docs/architecture/overview.md), [database schema](docs/database/schema.md), [asset pipeline](docs/assets/asset-pipeline.md), [performance budgets](docs/performance/performance-budget.md), and [ADRs](docs/adr/0001-foundation.md).
 
@@ -50,10 +51,10 @@ The unit suite includes real PostgreSQL execution through PGlite: migration/seed
 
 The app runs without credentials. To provision a local Supabase environment, install the official Supabase CLI and Docker, then run `supabase start`, `supabase db reset`, and `supabase test db`. These services are not installed or remotely provisioned by this milestone. Development seed fixtures must not be loaded into a production catalog. Copy `.env.example` to `.env.local` and set the documented public URL/key and data-source flag only after the migration is applied.
 
-All domain tables have RLS. Public records require `is_public=true`; API roles have SELECT privileges only, and the catalog view is security-invoker. Secret/service-role credentials stay server-side. The import validator rejects invalid records and real specifications lacking field-level provenance. No unsafe HTML or network scraping is used. Private writes/authentication/build persistence remain future work.
+All domain tables have RLS. Public records require `is_public=true`; API roles have SELECT privileges only, and the catalog view is security-invoker. Secret/service-role credentials stay server-side. The import validator rejects invalid records and real specifications lacking field-level provenance. No unsafe HTML or network scraping is used. Remote private writes/authentication remain future work. The development build persists locally through the native SQLite boundary.
 
-## First-pass scope and next milestone
+## Current scope and later milestones
 
-The explorer renders one generic motherboard template; the other four categories demonstrate domain schemas and compatibility, not independent 3D viewers. Adaptive profiles apply DPR, antialiasing, shadows and detail bias; texture/post-processing/reflection settings are reserved policy fields because this scene uses no image textures or post-processing. GLB loading and optimization are supported seams, not a catalog of downloaded assets. Installation animation, occupied-slot bookkeeping, aggregate build memory/power and exact CPU/BIOS validation are not implemented.
+The explorer renders one generic motherboard template; the other four categories demonstrate domain schemas and compatibility, not independent 3D viewers. Adaptive profiles apply DPR, antialiasing, shadows and detail bias; texture/post-processing/reflection settings are reserved policy fields because this scene uses no image textures or post-processing. GLB loading and optimization are supported seams, not a catalog of downloaded assets. CPU, individual DIMMs and M.2 2280 NVMe assembly are implemented with semantic previews, animations, occupied-slot rejection, explicit replace/remove, confirmed reset and local persistence. Memory/storage totals derive from the build domain. Exact CPU/BIOS certification and aggregate PSU power remain outside this milestone.
 
-Next: complete Windows release hardening on clean Windows 10/11 machines, physical high-DPI/multi-monitor testing and a deliberate signing/update policy. CPU/RAM/GPU installation work remains deferred until desktop validation is stable.
+Next: complete Windows release hardening on clean Windows 10/11 machines, physical high-DPI/multi-monitor testing and a deliberate signing/update policy. GPU, PSU, case and cooling installation and large real-product ingestion remain deferred.

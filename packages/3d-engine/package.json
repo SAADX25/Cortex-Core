@@ -12,7 +12,8 @@
     "@react-three/fiber": "9.8.1",
     "@react-three/drei": "10.7.9",
     "@cortex/part-schema": "workspace:*",
-    "@cortex/asset-runtime": "workspace:*"
+    "@cortex/asset-runtime": "workspace:*",
+    "@cortex/build-domain": "workspace:*"
   },
   "peerDependencies": {
     "react": "^19.3.0",

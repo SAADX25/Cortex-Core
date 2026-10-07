@@ -23,7 +23,7 @@ try {
     page.on('pageerror', (error) => errors.push(error.message));
     page.on('request', (request) => requests.push(request.url()));
     await page.goto('http://127.0.0.1:4173/?debug=1');
-    await page.getByRole('heading', { name: /Get closer to/ }).waitFor();
+    await page.getByRole('heading', { name: /Your hardware workspace/ }).waitFor();
     assert(
       !requests.some((url) => /renderer-/.test(url)),
       'Landing must not request renderer code',

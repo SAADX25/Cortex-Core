@@ -91,6 +91,9 @@ importers:
       '@cortex/asset-runtime':
         specifier: workspace:*
         version: link:../asset-runtime
+      '@cortex/build-domain':
+        specifier: workspace:*
+        version: link:../build-domain
       '@cortex/part-schema':
         specifier: workspace:*
         version: link:../part-schema
@@ -128,6 +131,9 @@ importers:
       '@cortex/asset-runtime':
         specifier: workspace:*
         version: link:../asset-runtime
+      '@cortex/build-domain':
+        specifier: workspace:*
+        version: link:../build-domain
       '@cortex/compatibility-engine':
         specifier: workspace:*
         version: link:../compatibility-engine
@@ -178,6 +184,18 @@ importers:
       '@types/three':
         specifier: 0.186.0
         version: 0.186.0
+
+  packages/build-domain:
+    dependencies:
+      '@cortex/compatibility-engine':
+        specifier: workspace:*
+        version: link:../compatibility-engine
+      '@cortex/part-schema':
+        specifier: workspace:*
+        version: link:../part-schema
+      zod:
+        specifier: 4.6.5
+        version: 4.6.5
 
   packages/compatibility-engine:
     dependencies:

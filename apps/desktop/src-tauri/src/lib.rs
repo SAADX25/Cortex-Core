@@ -1,3 +1,4 @@
+mod build;
 mod catalog;
 use serde::Serialize;
 use std::{fs, io::Write, path::PathBuf, sync::Mutex};
@@ -6,10 +7,37 @@ use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
 struct DesktopState {
+    build_path: PathBuf,
+    build_lock: Mutex<()>,
     snapshot: catalog::Snapshot,
     cache_status: String,
     log_dir: PathBuf,
     logged_failure: Mutex<bool>,
+}
+#[tauri::command]
+fn load_development_build(
+    state: tauri::State<DesktopState>,
+) -> Result<Option<build::Build>, String> {
+    let _lock = state
+        .build_lock
+        .lock()
+        .map_err(|_| "Build storage unavailable")?;
+    let mut db =
+        rusqlite::Connection::open(&state.build_path).map_err(|_| "Cannot open build database")?;
+    build::load(&mut db, &state.snapshot.parts)
+}
+#[tauri::command]
+fn save_development_build(
+    build: serde_json::Value,
+    state: tauri::State<DesktopState>,
+) -> Result<(), String> {
+    let _lock = state
+        .build_lock
+        .lock()
+        .map_err(|_| "Build storage unavailable")?;
+    let mut db =
+        rusqlite::Connection::open(&state.build_path).map_err(|_| "Cannot open build database")?;
+    build::save(&mut db, build, &state.snapshot.parts)
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -146,6 +174,11 @@ pub fn run() {
                 ),
             };
             app.manage(DesktopState {
+                build_path: app
+                    .path()
+                    .app_local_data_dir()?
+                    .join("development-build.sqlite3"),
+                build_lock: Mutex::new(()),
                 snapshot,
                 cache_status,
                 log_dir: log,
@@ -197,7 +230,9 @@ pub fn run() {
             desktop_status,
             set_viewer_fullscreen,
             record_graphics_failure,
-            open_documentation
+            open_documentation,
+            load_development_build,
+            save_development_build
         ])
         .run(tauri::generate_context!())
         .expect("Cortex Core desktop runtime could not start");

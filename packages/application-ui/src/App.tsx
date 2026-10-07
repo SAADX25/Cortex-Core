@@ -7,6 +7,8 @@ import { Icon } from './icons';
 import Catalog from './Catalog';
 import Settings from './Settings';
 import { isDesktop } from './platform';
+import { useBuildStore } from './build-store';
+import { version } from '../../../package.json';
 const Explorer = lazy(() => import('./viewer/Explorer'));
 function useRoute() {
   const [route, setRoute] = useState(() => location.hash.slice(1) || '/');
@@ -31,8 +33,11 @@ export default function App() {
     queryKey: partKeys.catalog,
     queryFn: async ({ signal }) => (await getRepository()).list(signal),
   });
+  useEffect(() => {
+    if (catalog.data) void useBuildStore.getState().initialize(catalog.data);
+  }, [catalog.data]);
   const slug = route.split('/')[2];
-  const isExplorer = route.startsWith('/explorer');
+  const isExplorer = route.startsWith('/explorer') || route === '/builder';
   const board = catalog.data?.find(
     (part) => part.category === 'motherboard' && (!isExplorer || !slug || part.slug === slug),
   );
@@ -98,9 +103,9 @@ export default function App() {
           </a>
         </nav>
         <div className="rail-note">
-          <span className="hint-dot" /> Desktop foundation
+          <span className="hint-dot" /> Assembly foundation
           <br />
-          <small>0.2.0 · Development build</small>
+          <small>{version} · Development build</small>
         </div>
       </aside>
       <div className="workspace-body">
@@ -136,7 +141,11 @@ export default function App() {
                   </div>
                 }
               >
-                <Explorer board={board} />
+                <Explorer
+                  key={route === '/builder' ? 'builder' : board.id}
+                  board={board}
+                  assembly={route === '/builder'}
+                />
               </Suspense>
             ) : (
               <main className="error-page">
@@ -153,10 +162,10 @@ export default function App() {
               <div className="eyebrow">PLANNED WORKSPACE</div>
               <h1>{title}</h1>
               <section className="settings-section">
-                <h2>Build assembly is coming later.</h2>
+                <h2>One development build is saved locally.</h2>
                 <p className="muted">
-                  This desktop foundation supports hardware inspection. Component installation,
-                  portable build files and saved builds will arrive in a later milestone.
+                  Open PC Builder to install fixture CPUs, individual DIMMs and M.2 NVMe devices.
+                  Named builds and portable build files will arrive in a later milestone.
                 </p>
                 <a className="button primary" href={explorerLink}>
                   Open Motherboard Explorer
@@ -165,7 +174,7 @@ export default function App() {
             </main>
           ) : (
             <main className="home-page">
-              <div className="eyebrow">CORTEX CORE / DESKTOP FOUNDATION</div>
+              <div className="eyebrow">CORTEX CORE / ASSEMBLY FOUNDATION</div>
               <h1>
                 Your hardware workspace<span className="title-dot">.</span>
               </h1>

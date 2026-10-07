@@ -1,13 +1,15 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "Only the local main workspace may read its fixed catalog/status, toggle fullscreen, record bounded graphics codes and open reviewed documentation.",
+  "description": "Only the local main workspace may read its fixed catalog/status, read/save its versioned development build, set fullscreen, record bounded graphics codes and open reviewed documentation. No generic filesystem or shell access.",
   "windows": ["main"],
   "permissions": [
     "allow-load-catalog-snapshot",
     "allow-desktop-status",
     "allow-set-viewer-fullscreen",
     "allow-record-graphics-failure",
-    "allow-open-documentation"
+    "allow-open-documentation",
+    "allow-load-development-build",
+    "allow-save-development-build"
   ]
 }

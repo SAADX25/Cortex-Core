@@ -10,6 +10,9 @@ import InfoPanel from './InfoPanel';
 import FallbackDiagram from './FallbackDiagram';
 import { Icon } from '../icons';
 import { isDesktop, setDesktopFullscreen, recordGraphicsFailure } from '../platform';
+import AssemblyPanel, { BuildSummary } from '../Assembly';
+import { useBuildStore } from '../build-store';
+import { destinations, remove, type SlotId } from '@cortex/build-domain';
 
 function useReducedMotion() {
   const [reduced, setReduced] = useState(
@@ -23,8 +26,41 @@ function useReducedMotion() {
   }, []);
   return reduced;
 }
-export default function Explorer({ board }: { board: Motherboard }) {
+export default function Explorer({
+  board,
+  assembly = false,
+}: {
+  board: Motherboard;
+  assembly?: boolean;
+}) {
   const state = useViewerStore();
+  const build = useBuildStore();
+  const [panel, setPanel] = useState<'inspect' | 'assembly'>(assembly ? 'assembly' : 'inspect');
+  const part = build.catalog.find((p) => p.id === build.chosenPartId);
+  const validSlots =
+    build.build && part && build.choosing
+      ? destinations(
+          build.replacing ? remove(build.build, build.replacing) : build.build,
+          part,
+          build.catalog,
+        )
+          .filter((s) => s.installable && (!build.replacing || s.id === build.replacing))
+          .map((s) => s.id)
+      : [];
+  const previewSlot =
+    validSlots.find((id) => id === state.hovered) ??
+    (validSlots.includes(build.preview!) ? build.preview : null);
+  const select = (id: Parameters<typeof state.select>[0]) => {
+    state.select(id);
+    if (id && validSlots.includes(id as SlotId)) build.setPreview(id as SlotId);
+    else if (!build.choosing && !build.busy) {
+      const installed = build.build?.installations.find((i) => i.slotId === id);
+      if (installed) {
+        build.choose(installed.partId);
+        setPanel('assembly');
+      }
+    }
+  };
   const reducedMotion = useReducedMotion();
   const [graphics, setGraphics] = useState<
     'ready' | 'unsupported' | 'failed' | 'load-failed' | 'diagram'
@@ -75,7 +111,7 @@ export default function Explorer({ board }: { board: Motherboard }) {
     [],
   );
   const fallback = (
-    <FallbackDiagram selected={state.selected} onSelect={state.select} exploded={state.exploded} />
+    <FallbackDiagram selected={state.selected} onSelect={select} exploded={state.exploded} />
   );
   const retry = () => {
     if (graphics === 'load-failed') {
@@ -116,8 +152,9 @@ export default function Explorer({ board }: { board: Motherboard }) {
           DEVELOPMENT FIXTURE
         </span>
       </div>
+      <BuildSummary />
       <div className="explorer-workspace">
-        <ComponentList />
+        <ComponentList onSelect={select} />
         <section
           className={`viewport ${nativeFullscreen ? 'viewer-fullscreen' : ''}`}
           ref={viewport}
@@ -154,7 +191,7 @@ export default function Explorer({ board }: { board: Motherboard }) {
                     board={board}
                     selected={state.selected}
                     hovered={state.hovered}
-                    onSelect={state.select}
+                    onSelect={select}
                     onHover={state.hover}
                     exploded={state.exploded}
                     labels={state.labels}
@@ -164,6 +201,14 @@ export default function Explorer({ board }: { board: Motherboard }) {
                     diagnostics={diagnostics}
                     onMetrics={setMetrics}
                     onFailure={onFailure}
+                    assembly={{
+                      installations: build.build?.installations ?? [],
+                      transitions: build.transitions,
+                      preview:
+                        previewSlot && part ? { slotId: previewSlot, partId: part.id } : null,
+                      validSlots,
+                      catalog: build.catalog,
+                    }}
                   />
                 </Suspense>
               </GraphicsBoundary>
@@ -295,6 +340,10 @@ export default function Explorer({ board }: { board: Motherboard }) {
               data-camera={metrics.camera}
               data-projections={JSON.stringify(metrics.projections)}
               data-geometries={metrics.geometries}
+              data-materials={metrics.materials}
+              data-textures={metrics.textures}
+              data-installed-visuals={JSON.stringify(metrics.installedVisuals)}
+              data-transitions={build.transitions.length}
             >
               {metrics.fps || 'idle'} FPS · {metrics.frameMs} ms · {metrics.calls} draws ·{' '}
               {metrics.triangles} triangles · {metrics.geometries} geometries · {metrics.textures}{' '}
@@ -302,7 +351,17 @@ export default function Explorer({ board }: { board: Motherboard }) {
             </output>
           )}
         </section>
-        <InfoPanel board={board} />
+        <div className="inspector-stack">
+          <div className="inspector-tabs">
+            <button aria-pressed={panel === 'inspect'} onClick={() => setPanel('inspect')}>
+              Inspect
+            </button>
+            <button aria-pressed={panel === 'assembly'} onClick={() => setPanel('assembly')}>
+              Assembly
+            </button>
+          </div>
+          {panel === 'inspect' ? <InfoPanel board={board} /> : <AssemblyPanel />}
+        </div>
       </div>
       <div className="explorer-bottom-note">
         <span>

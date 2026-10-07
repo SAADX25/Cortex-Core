@@ -8,11 +8,11 @@ Install Node 24.17.x, pnpm 10.17.0, Rust stable, Visual Studio C++ tools and a W
 
 `pnpm desktop:check` runs Cargo check with the committed lockfile. `pnpm desktop:test` tests SQLite migrations/envelopes. `node tools/desktop/run.mjs rust-fmt` checks formatting. `node tools/desktop/generate-fixtures.mjs --check` verifies the bundled native catalog matches shared fixtures; omit `--check` to regenerate after deliberate fixture changes.
 
-`pnpm desktop:build` builds frontend assets, checks gzip budgets, compiles release Rust, and produces a Windows NSIS installer. `pnpm desktop:package` additionally copies the executable and explicitly named development installer to `release/windows-x64` and records SHA-256 hashes/sizes. Intermediate outputs are `apps/desktop/src-tauri/target/release/Cortex Core.exe` and `target/release/bundle/nsis/Cortex Core_0.2.0_x64-setup.exe`. Generated build/release output is ignored by Git.
+`pnpm desktop:build` builds frontend assets, checks gzip budgets, compiles release Rust, and produces a Windows NSIS installer. `pnpm desktop:package` additionally copies the executable and explicitly named development installer to `release/windows-x64` and records SHA-256 hashes/sizes. Intermediate outputs are `apps/desktop/src-tauri/target/release/Cortex Core.exe` and `target/release/bundle/nsis/Cortex Core_0.3.0_x64-setup.exe`. Generated build/release output is ignored by Git.
 
 ## Windows installation
 
-Product name is Cortex Core, app version 0.2.0, identity `dev.cortexcore.desktop`; the window and Settings visibly identify a development build. NSIS installs per user, normally under `%LOCALAPPDATA%\Cortex Core`, permits a chosen directory, creates a Start menu entry in the Cortex Core folder and an uninstaller. The finish page offers a desktop shortcut; silent/passive installation creates one unless `/NS` is supplied. Shortcut application identity uses the bundle ID and original app icon.
+Product name is Cortex Core, app version 0.3.0, identity `dev.cortexcore.desktop`; the window and Settings visibly identify a development build. NSIS installs per user, normally under `%LOCALAPPDATA%\Cortex Core`, permits a chosen directory, creates a Start menu entry in the Cortex Core folder and an uninstaller. The finish page offers a desktop shortcut; silent/passive installation creates one unless `/NS` is supplied. Shortcut application identity uses the bundle ID and original app icon.
 
 These builds are **unsigned**. Publisher is an explicitly documented development placeholder. Before public distribution, replace development identity/publisher, configure a real Windows signing certificate, verify signatures and define release approval/retention policy. CI validates and uploads development artifacts; it does not publish releases.
 
@@ -22,11 +22,13 @@ The official WebView2 bootstrapper is embedded. If the runtime is absent, its in
 
 Development alone uses `http://127.0.0.1:5173`. Release uses Tauri's packaged asset protocol (`http://tauri.localhost` on Windows), **not an HTTP server listening on localhost**. The test runner injects an external CDP debugging environment variable; normal launches do not enable that endpoint.
 
-The main-window capability permits only `load_catalog_snapshot`, `desktop_status`, `set_viewer_fullscreen`, `record_graphics_failure`, and `open_documentation`. AppManifest explicitly restricts app commands. No default broad capability, filesystem, SQL, process/shell, general opener or general window API is granted to the renderer. There are no remote capabilities or wildcard window scopes. Test checks prove an installed plugin's ungranted state-save command is denied.
+The main-window capability permits only `load_catalog_snapshot`, `desktop_status`, `set_viewer_fullscreen`, `record_graphics_failure`, `open_documentation`, `load_development_build`, and `save_development_build`. AppManifest explicitly restricts app commands. No default broad capability, filesystem, SQL, process/shell, general opener or general window API is granted to the renderer. There are no remote capabilities or wildcard window scopes. Test checks prove an installed plugin's ungranted state-save command is denied.
 
 Production CSP restricts scripts/assets to packaged origins, allows IPC and necessary inline styles/blob workers, and blocks arbitrary remote connections, framing and forms. Native navigation only allows the app origin; new windows are denied. Reviewed documentation keys open fixed HTTPS addresses through Rust in the default browser. Invalid keys cannot open arbitrary URLs.
 
 ## Persistence, offline data and diagnostics
+
+Phase 2 stores one versioned build in a separate fixed app-local-data `development-build.sqlite3`. Rust validates structure/references and saves atomically; the shared build domain validates compatibility on restore. Invalid/newer builds are preserved with assembly disabled. Confirmed reset removes only installations. See [assembly architecture](../architecture/adr-0005-assembly-domain.md) and [assembly usage](assembly.md).
 
 Tauri's OS directory APIs separate app-config/window state, app-local-data/catalog SQLite, app-cache/assets, app-cache/temp and app-log. No writes occur beside the executable. Windows resolves these under the user's Roaming/Local AppData areas. Window-state persistence saves size/position/maximize; a disconnected-monitor position is recentered. Native minimum size is 1000×680 logical pixels; default is 1440×960. Fullscreen is explicit and exits on Escape/route teardown; it is not restored at next launch.
 
