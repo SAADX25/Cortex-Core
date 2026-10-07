@@ -1,0 +1,28 @@
+:root {
+  color-scheme: dark;
+  --font: 'Segoe UI', Inter, Arial, sans-serif;
+  --mono: 'Cascadia Code', 'SFMono-Regular', Consolas, monospace;
+  --bg: #101415;
+  --surface: #151a1c;
+  --raised: #1b2224;
+  --canvas: #101617;
+  --text: #e5eae6;
+  --muted: #909c98;
+  --faint: #626f6b;
+  --border: #29322f;
+  --border-soft: #202927;
+  --accent: #baf36c;
+  --accent-hover: #cbff85;
+  --accent-dim: #263524;
+  --accent-border: #405937;
+  --ink: #17200f;
+  --gold: #bb9b54;
+  --metal: #929f9a;
+  --dark-metal: #263030;
+  --pcb: #263a35;
+  --pcb-edge: #456054;
+  --pcb-shadow: #1b2a24;
+  --pcb-trace: #2b4239;
+  --shadow: #00000050;
+}
+/* A future light theme only needs token overrides; no component rewrite. */

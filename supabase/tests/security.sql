@@ -1,0 +1,11 @@
+begin;
+create extension if not exists pgtap with schema extensions;
+select plan(6);
+select is((select count(*)::integer from pg_class c join pg_namespace n on n.oid = c.relnamespace where n.nspname = 'public' and c.relkind = 'r' and c.relrowsecurity), 9, 'All domain tables have RLS');
+select ok(not has_table_privilege('anon', 'public.parts', 'INSERT'), 'Anonymous cannot insert');
+select ok(not has_table_privilege('authenticated', 'public.parts', 'UPDATE'), 'Authenticated cannot edit');
+select ok(not has_table_privilege('anon', 'public.part_sources', 'DELETE'), 'Sources cannot be deleted by clients');
+select ok(has_table_privilege('anon', 'public.catalog_records', 'SELECT'), 'Public catalog is readable');
+select ok((select reloptions @> array['security_invoker=true'] from pg_class where oid = 'public.catalog_records'::regclass), 'Catalog view honors caller RLS');
+select * from finish();
+rollback;

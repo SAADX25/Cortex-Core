@@ -1,0 +1,19 @@
+{
+  "name": "@cortex/asset-runtime",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./glb-loader": "./src/glb-loader.ts",
+    "./manifest": "./src/manifest.ts"
+  },
+  "dependencies": {
+    "three": "0.186.1",
+    "zod": "4.6.5",
+    "@cortex/part-schema": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/three": "0.186.0"
+  }
+}

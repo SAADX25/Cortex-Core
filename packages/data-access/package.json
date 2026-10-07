@@ -1,0 +1,14 @@
+{
+  "name": "@cortex/data-access",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./supabase": "./src/supabase.ts"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "2.117.3",
+    "@cortex/part-schema": "workspace:*"
+  }
+}

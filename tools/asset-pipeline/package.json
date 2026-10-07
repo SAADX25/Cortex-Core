@@ -1,0 +1,12 @@
+{
+  "name": "@cortex/asset-pipeline",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "optimize": "node optimize.mjs"
+  },
+  "dependencies": {
+    "@gltf-transform/cli": "4.5.1"
+  }
+}
