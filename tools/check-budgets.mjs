@@ -9,7 +9,7 @@ const rows = await Promise.all(
       const data = await readFile(new URL(name, directory));
       const type = name.startsWith('renderer-')
         ? 'renderer'
-        : name.startsWith('Explorer-')
+        : name.startsWith('Explorer-') || name.startsWith('DetectedViewer-')
           ? 'explorer'
           : name.endsWith('.css')
             ? 'styles'

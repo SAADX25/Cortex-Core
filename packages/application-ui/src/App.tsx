@@ -1,238 +1,217 @@
 import { lazy, Suspense, useEffect, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { partKeys } from '@cortex/data-access';
-import type { Part } from '@cortex/part-schema';
-import { getRepository } from './repository';
-import { Icon } from './icons';
-import Catalog from './Catalog';
+import { useStore } from 'zustand';
+import { Icon, type IconName } from './icons';
 import Settings from './Settings';
 import { isDesktop } from './platform';
-import { useBuildStore } from './build-store';
+import { hardwareStore } from './hardware-store';
+import {
+  hardwareCategories,
+  categoryNames,
+  cardSummary,
+  specifications,
+  type HardwareCategory,
+} from './hardware';
+import HardwareInspector from './HardwareInspector';
 import { version } from '../../../package.json';
-const Explorer = lazy(() => import('./viewer/Explorer'));
-function useRoute() {
-  const [route, setRoute] = useState(() => location.hash.slice(1) || '/');
+const DetectedViewer = lazy(() => import('./viewer/DetectedViewer'));
+const icons: Record<HardwareCategory, IconName> = {
+  cpu: 'chip',
+  gpu: 'layers',
+  memory: 'grid',
+  motherboard: 'chip',
+  storage: 'box',
+  os: 'grid',
+};
+export default function App() {
+  const [route, setRoute] = useState(location.hash.slice(1));
+  const [selected, setSelected] = useState<HardwareCategory | null>(null);
+  const [copyStatus, setCopyStatus] = useState('');
+  const { scan, scanning, error, start, rescan } = useStore(hardwareStore);
   useEffect(() => {
-    const update = () => setRoute(location.hash.slice(1) || '/');
+    void start();
+  }, [start]);
+  useEffect(() => {
+    const update = () => {
+      setRoute(location.hash.slice(1));
+      setSelected(null);
+    };
     window.addEventListener('hashchange', update);
     return () => window.removeEventListener('hashchange', update);
   }, []);
-  return route;
-}
-
-const categories: [string, Part['category']][] = [
-  ['Motherboards', 'motherboard'],
-  ['CPUs', 'cpu'],
-  ['GPUs', 'gpu'],
-  ['Memory', 'ram'],
-  ['Storage', 'storage'],
-];
-export default function App() {
-  const route = useRoute();
-  const catalog = useQuery({
-    queryKey: partKeys.catalog,
-    queryFn: async ({ signal }) => (await getRepository()).list(signal),
-  });
-  useEffect(() => {
-    if (catalog.data) void useBuildStore.getState().initialize(catalog.data);
-  }, [catalog.data]);
-  const slug = route.split('/')[2];
-  const isExplorer = route.startsWith('/explorer') || route === '/builder';
-  const board = catalog.data?.find(
-    (part) => part.category === 'motherboard' && (!isExplorer || !slug || part.slug === slug),
-  );
-  const explorerLink = '#/explorer' + (board ? '/' + board.slug : '');
-  const category = categories.find(([, key]) => route === '/catalog/' + key)?.[1];
-  const title = isExplorer
-    ? 'Motherboard Explorer'
-    : route.startsWith('/catalog')
-      ? 'Hardware Library'
-      : route === '/settings'
-        ? 'Settings'
-        : route === '/builder'
-          ? 'PC Builder'
-          : route === '/builds'
-            ? 'Saved Builds'
-            : 'Home';
+  const view = route === '/3d' ? '3D View' : route === '/settings' ? 'Settings' : 'My PC';
+  async function copy() {
+    if (!scan) return;
+    try {
+      await navigator.clipboard.writeText(specifications(scan));
+      setCopyStatus('Specifications copied');
+    } catch {
+      setCopyStatus('Clipboard unavailable. Please try again.');
+    }
+  }
   return (
-    <div className="desktop-shell">
+    <div className="desktop-shell mypc-shell">
       <a className="skip-link" href="#main-content">
         Skip to content
       </a>
       <aside className="workspace-rail">
         <a className="brand" href="#/" aria-label="Cortex Core home">
           <span className="brand-mark">
-            <Icon name="chip" size={23} />
+            <Icon name="chip" size={24} />
           </span>
           <span>
             CORTEX<span className="brand-light">CORE</span>
           </span>
         </a>
         <nav className="workspace-nav" aria-label="Primary navigation">
-          <a href="#/" aria-current={route === '/' ? 'page' : undefined}>
-            <Icon name="grid" />
-            Home
+          <a href="#/" aria-current={view === 'My PC' ? 'page' : undefined}>
+            <Icon name="grid" size={20} />
+            My PC
           </a>
-          <a href="#/catalog" aria-current={route === '/catalog' ? 'page' : undefined}>
-            <Icon name="box" />
-            Hardware Library
+          <a href="#/3d" aria-current={view === '3D View' ? 'page' : undefined}>
+            <Icon name="box" size={20} />
+            3D View
           </a>
-          <div className="nav-group-label">COMPONENTS</div>
-          {categories.map(([name, key]) => (
-            <a
-              key={key}
-              className="category-link"
-              href={'#/catalog/' + key}
-              aria-current={category === key ? 'page' : undefined}
-            >
-              {name}
-            </a>
-          ))}
-          <div className="nav-group-label">WORKSPACE</div>
-          <a href="#/builder" aria-current={route === '/builder' ? 'page' : undefined}>
-            <Icon name="layers" />
-            PC Builder
-          </a>
-          <a href="#/builds" aria-current={route === '/builds' ? 'page' : undefined}>
-            <Icon name="box" />
-            Saved Builds
-          </a>
-          <a href="#/settings" aria-current={route === '/settings' ? 'page' : undefined}>
-            <Icon name="info" />
+          <a href="#/settings" aria-current={view === 'Settings' ? 'page' : undefined}>
+            <Icon name="info" size={20} />
             Settings
           </a>
         </nav>
         <div className="rail-note">
-          <span className="hint-dot" /> Assembly foundation
+          <span className="hint-dot" /> Local by design
           <br />
-          <small>{version} · Development build</small>
+          <small>Cortex Core {version}</small>
         </div>
       </aside>
       <div className="workspace-body">
         <header className="workspace-header">
-          <div>
-            <span className="eyebrow">WORKSPACE</span>
-            <strong>{title}</strong>
-          </div>
-          <span className="fixture-badge">
-            <span />
-            FICTIONAL DEVELOPMENT HARDWARE
+          <strong>{view}</strong>
+          <span className="local-badge">
+            <span className="hint-dot" />
+            {isDesktop ? 'ON YOUR DEVICE' : 'BROWSER PREVIEW'}
           </span>
         </header>
         <div id="main-content" tabIndex={-1}>
-          {catalog.isPending ? (
-            <div className="page-loading" role="status">
-              Loading hardware records…
-            </div>
-          ) : catalog.isError ? (
-            <main className="error-page">
-              <h1>Hardware data is unavailable.</h1>
-              <p>{catalog.error.message}</p>
-              <button className="button primary" onClick={() => void catalog.refetch()}>
-                Retry data
-              </button>
-            </main>
-          ) : isExplorer ? (
-            board?.category === 'motherboard' ? (
-              <Suspense
-                fallback={
-                  <div className="page-loading" role="status">
-                    Opening explorer…
-                  </div>
-                }
-              >
-                <Explorer
-                  key={route === '/builder' ? 'builder' : board.id}
-                  board={board}
-                  assembly={route === '/builder'}
-                />
-              </Suspense>
-            ) : (
-              <main className="error-page">
-                <h1>Motherboard not found.</h1>
-                <a href="#/catalog">Return to the hardware library</a>
-              </main>
-            )
-          ) : route.startsWith('/catalog') ? (
-            <Catalog key={route} parts={catalog.data} category={category} />
-          ) : route === '/settings' ? (
+          {view === 'Settings' ? (
             <Settings />
-          ) : route === '/builder' || route === '/builds' ? (
-            <main className="settings-page">
-              <div className="eyebrow">PLANNED WORKSPACE</div>
-              <h1>{title}</h1>
-              <section className="settings-section">
-                <h2>One development build is saved locally.</h2>
-                <p className="muted">
-                  Open PC Builder to install fixture CPUs, individual DIMMs and M.2 NVMe devices.
-                  Named builds and portable build files will arrive in a later milestone.
-                </p>
-                <a className="button primary" href={explorerLink}>
-                  Open Motherboard Explorer
-                </a>
-              </section>
-            </main>
+          ) : view === '3D View' && scan ? (
+            <Suspense
+              fallback={
+                <div className="page-loading" role="status">
+                  Opening 3D View…
+                </div>
+              }
+            >
+              <DetectedViewer scan={scan} />
+            </Suspense>
           ) : (
-            <main className="home-page">
-              <div className="eyebrow">CORTEX CORE / ASSEMBLY FOUNDATION</div>
-              <h1>
-                Your hardware workspace<span className="title-dot">.</span>
-              </h1>
-              <p className="muted">
-                Inspect components, trace connections and explore the architecture of a PC.
-              </p>
-              <section className="home-workspace">
-                <div className="home-preview" aria-hidden="true">
-                  <Icon name="chip" size={112} />
-                  <span>ATX / REFERENCE 001</span>
-                </div>
+            <main className="mypc-page">
+              <div className="dashboard-heading">
                 <div>
-                  <span className="eyebrow">READY TO EXPLORE</span>
-                  <h2>Motherboard Explorer</h2>
+                  <div className="eyebrow">YOUR HARDWARE, AT A GLANCE</div>
+                  <h1>
+                    My PC<span className="title-dot">.</span>
+                  </h1>
                   <p className="muted">
-                    17 selectable regions · Component specifications · Exploded view
+                    The hardware inside your computer. Automatically detected.
                   </p>
-                  <a className="button primary" href={explorerLink}>
-                    Open Motherboard Explorer
-                    <Icon name="arrow" />
-                  </a>
                 </div>
-              </section>
-              <div className="home-summary">
-                <section>
-                  <span className="eyebrow">LOCAL LIBRARY</span>
-                  <strong>{catalog.data.length} hardware fixtures</strong>
-                  <p>Independent component schemas and reference compatibility rules.</p>
-                  <a className="text-link" href="#/catalog">
-                    Browse the library
-                    <Icon name="arrow" />
-                  </a>
-                </section>
-                <section>
-                  <span className="eyebrow">AVAILABLE OFFLINE</span>
-                  <strong>One essential template</strong>
-                  <p>The original reference board requires no downloaded models.</p>
-                  <a className="text-link" href="#/settings">
-                    Catalog & cache status
-                    <Icon name="arrow" />
-                  </a>
-                </section>
+                <div className="scan-label">
+                  <span className="hint-dot" />
+                  {scanning ? 'Scanning your PC…' : scan ? 'Hardware detected' : 'Ready to scan'}
+                  {scan && <small>Last scanned: {new Date(scan.scannedAt).toLocaleString()}</small>}
+                </div>
               </div>
-              <p className="home-fixture">
-                <Icon name="info" size={16} />
-                These fictional development records do not describe real products.
-              </p>
+              <div className="dashboard-actions">
+                <button
+                  className="button secondary"
+                  disabled={scanning}
+                  onClick={() => void rescan()}
+                >
+                  <Icon name="reset" />
+                  {scanning ? 'Scanning…' : 'Rescan Hardware'}
+                </button>
+                <a
+                  className={`button primary ${!scan ? 'action-disabled' : ''}`}
+                  href={scan ? '#/3d' : undefined}
+                  aria-disabled={!scan}
+                >
+                  <Icon name="box" />
+                  View in 3D
+                </a>
+                <button className="button secondary" disabled={!scan} onClick={() => void copy()}>
+                  <Icon name="layers" />
+                  Copy Specifications
+                </button>
+                <span role="status" className="copy-status">
+                  {copyStatus}
+                </span>
+              </div>
+              {error && (
+                <p className="scan-error" role="alert">
+                  {error}
+                </p>
+              )}
+              {!scan ? (
+                <div className="scan-empty" role="status">
+                  <Icon name="chip" size={60} />
+                  <h2>
+                    {scanning || !error ? 'Scanning your PC…' : 'Hardware information unavailable'}
+                  </h2>
+                  <p className="muted">
+                    {isDesktop
+                      ? 'Reading system-reported specifications locally.'
+                      : 'Open Cortex Core Desktop to detect your Windows hardware.'}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <section className="hardware-grid" aria-label="Detected hardware">
+                    {hardwareCategories.map((key) => {
+                      const summary = cardSummary(scan, key);
+                      return (
+                        <button
+                          key={key}
+                          className={`hardware-card hardware-${key}`}
+                          onClick={(event) => {
+                            event.currentTarget.focus();
+                            setSelected(key);
+                          }}
+                          aria-label={`${categoryNames[key]} details`}
+                        >
+                          <div className="hardware-card-label">
+                            <span className="hardware-symbol">
+                              <Icon name={icons[key]} size={25} />
+                            </span>
+                            <span>{categoryNames[key]}</span>
+                            <Icon name="chevron" size={17} />
+                          </div>
+                          <h2>{summary.name}</h2>
+                          <div className="hardware-card-summary">
+                            {summary.lines.map((line, i) => (
+                              <p key={i}>{line}</p>
+                            ))}
+                          </div>
+                          <span className="card-detail-link">
+                            View details <Icon name="arrow" size={16} />
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </section>
+                  <div className="dashboard-note">
+                    <Icon name="check" size={18} />
+                    <p>Scanned locally. Your specifications stay on this PC.</p>
+                    <span>Works offline</span>
+                  </div>
+                </>
+              )}
             </main>
           )}
         </div>
-        <footer className="workspace-status">
-          <span>
-            <span className="hint-dot" />{' '}
-            {isDesktop ? 'Desktop · Local catalog' : 'Development / browser test renderer'}
-          </span>
-          <span>CATALOG 2026.10.07.1 · ASSETS v1</span>
-        </footer>
       </div>
+      {scan && selected && (
+        <HardwareInspector scan={scan} category={selected} close={() => setSelected(null)} />
+      )}
     </div>
   );
 }

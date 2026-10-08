@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-load-hardware-scan"
+description = "Enables the load_hardware_scan command without any pre-configured scope."
+commands.allow = ["load_hardware_scan"]
+
+[[permission]]
+identifier = "deny-load-hardware-scan"
+description = "Denies the load_hardware_scan command without any pre-configured scope."
+commands.deny = ["load_hardware_scan"]

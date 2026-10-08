@@ -1,9 +1,11 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main",
-  "description": "Only the local main workspace may read its fixed catalog/status, read/save its versioned development build, set fullscreen, record bounded graphics codes and open reviewed documentation. No generic filesystem or shell access.",
+  "description": "Only the local main window may scan fixed local hardware sources, restore its normalized hardware cache, read its fixed catalog/status, use isolated build storage, set fullscreen, record bounded graphics codes and open reviewed documentation. No generic filesystem, shell or query access.",
   "windows": ["main"],
   "permissions": [
+    "allow-scan-hardware",
+    "allow-load-hardware-scan",
     "allow-load-catalog-snapshot",
     "allow-desktop-status",
     "allow-set-viewer-fullscreen",

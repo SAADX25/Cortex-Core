@@ -2,6 +2,7 @@ import { chromium } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
+import { hardwareFixture } from '../tests/hardware-fixture.ts';
 const output = new URL('../.artifacts/', import.meta.url);
 await mkdir(output, { recursive: true });
 const browser = await chromium.launch({
@@ -22,8 +23,23 @@ try {
     const requests = [];
     page.on('pageerror', (error) => errors.push(error.message));
     page.on('request', (request) => requests.push(request.url()));
+    // Synthetic data is injected by this test harness, never shipped by the app.
+    await page.addInitScript((scan) => {
+      Object.defineProperty(globalThis, 'isTauri', { value: true });
+      Object.defineProperty(globalThis, '__TAURI_INTERNALS__', {
+        value: {
+          invoke: async (command) => {
+            if (command === 'load_hardware_scan') return scan;
+            if (command === 'scan_hardware') return scan;
+            if (command === 'set_viewer_fullscreen' || command === 'record_graphics_failure')
+              return;
+            throw new Error('Unexpected test IPC');
+          },
+        },
+      });
+    }, hardwareFixture);
     await page.goto('http://127.0.0.1:4173/?debug=1');
-    await page.getByRole('heading', { name: /Your hardware workspace/ }).waitFor();
+    await page.getByRole('button', { name: 'CPU details', exact: true }).waitFor();
     assert(
       !requests.some((url) => /renderer-/.test(url)),
       'Landing must not request renderer code',
@@ -32,13 +48,14 @@ try {
       path: fileURLToPath(new URL(`landing-${viewport.width}.png`, output)),
       fullPage: true,
     });
-    await page.getByRole('link', { name: 'Open Motherboard Explorer' }).click();
+    await page.getByRole('link', { name: 'View in 3D', exact: true }).click();
     await page.getByTestId('canvas-stage').locator('canvas').waitFor();
     await page
-      .getByRole('navigation', { name: 'Motherboard components' })
-      .getByRole('button', { name: /CPU socket/ })
+      .getByRole('navigation', { name: 'Detected components' })
+      .getByRole('button', { name: 'CPU', exact: true })
       .click();
-    await page.getByRole('heading', { name: 'CPU socket', exact: true }).waitFor();
+    await page.getByRole('heading', { name: 'Test 8-core processor', exact: true }).waitFor();
+    await page.getByRole('button', { name: 'Close details' }).click();
     assert.equal(
       await page.getByTestId('diagnostics').count(),
       0,

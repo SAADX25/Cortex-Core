@@ -1,10 +1,11 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentRef } from 'react';
 import { Canvas, useFrame, useThree, type ThreeEvent } from '@react-three/fiber';
 import { Grid, Html, OrbitControls } from '@react-three/drei';
-import { Group, InstancedMesh, Matrix4, Vector3 } from 'three';
+import { Box3, Group, InstancedMesh, Matrix4, Vector3 } from 'three';
 import type { Motherboard } from '@cortex/part-schema';
 import { resolveVisualTemplate } from '@cortex/asset-runtime';
 import InstalledComponents, { type AssemblyScene } from './InstalledComponents';
+import DetectedComponents, { type DetectedScene } from './DetectedComponents';
 import {
   motherboardComponents,
   type CameraAction,
@@ -47,6 +48,7 @@ export interface SceneMetrics {
   projections: Record<string, [number, number]>;
 }
 export interface ExplorerRendererProps {
+  detected?: DetectedScene;
   assembly?: AssemblyScene;
   board: Motherboard;
   selected: ComponentId | null;
@@ -137,6 +139,7 @@ function Region({
       userData={{ semanticId: d.id }}
       onClick={(event) => {
         event.stopPropagation();
+        if (event.delta > 5) return;
         props.onSelect(d.id);
       }}
       onPointerOver={(event) => {
@@ -289,6 +292,7 @@ function Scene({
   pose: { current: CameraPose | null };
 }) {
   const controls = useRef<ComponentRef<typeof OrbitControls>>(null);
+  const hardwareRoot = useRef<Group>(null);
   const { camera, gl, invalidate, scene } = useThree();
   const [lod, setLod] = useState(1);
   const lastFrame = useRef(0);
@@ -332,11 +336,26 @@ function Scene({
         selected.position[2] / 1000,
       );
       position = target.clone().add(new Vector3(0.13, 0.19, 0.15));
-    } else if (props.cameraCommand.action === 'fit') {
+    } else if (
+      props.cameraCommand.action === 'fit' ||
+      (props.detected && props.cameraCommand.action === 'reset')
+    ) {
       const extent =
         Math.max(props.board.visual.dimensions.width, props.board.visual.dimensions.depth) / 1000;
       const portraitFactor = gl.domElement.clientHeight / Math.max(gl.domElement.clientWidth, 1);
       position = new Vector3(extent * Math.max(1, portraitFactor), extent * 1.35, extent * 1.2);
+      if (props.detected && hardwareRoot.current) {
+        hardwareRoot.current.updateWorldMatrix(true, true);
+        const bounds = new Box3().setFromObject(hardwareRoot.current);
+        if (!bounds.isEmpty()) {
+          target = bounds.getCenter(new Vector3());
+          const size = bounds.getSize(new Vector3());
+          const span = Math.max(size.x, size.y, size.z);
+          position = target
+            .clone()
+            .add(new Vector3(span * Math.max(1, portraitFactor), span * 1.35, span * 1.2));
+        }
+      }
     }
     if (props.reducedMotion) {
       camera.position.copy(position);
@@ -446,6 +465,7 @@ function Scene({
       />
       <directionalLight position={[-0.4, 0.1, 0.3]} intensity={1.3} color={sceneColors.accent} />
       <group
+        ref={hardwareRoot}
         scale={[
           props.board.visual.dimensions.width / 244,
           1,
@@ -456,6 +476,7 @@ function Scene({
           <Region key={descriptor.id} descriptor={descriptor} props={props} />
         ))}
         <Decorations lod={lod} />
+        {props.detected && <DetectedComponents scene={props.detected} />}
         {props.assembly && (
           <InstalledComponents
             assembly={props.assembly}

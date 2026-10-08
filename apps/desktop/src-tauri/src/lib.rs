@@ -1,5 +1,6 @@
 mod build;
 mod catalog;
+mod hardware;
 use serde::Serialize;
 use std::{fs, io::Write, path::PathBuf, sync::Mutex};
 use tauri::Manager;
@@ -7,12 +8,63 @@ use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
 struct DesktopState {
+    hardware_path: PathBuf,
+    hardware_lock: std::sync::Arc<Mutex<()>>,
     build_path: PathBuf,
     build_lock: Mutex<()>,
     snapshot: catalog::Snapshot,
     cache_status: String,
     log_dir: PathBuf,
     logged_failure: Mutex<bool>,
+}
+#[tauri::command]
+async fn load_hardware_scan(
+    state: tauri::State<'_, DesktopState>,
+) -> Result<Option<hardware::Hardware>, String> {
+    let path = state.hardware_path.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let db = rusqlite::Connection::open(path).map_err(|_| "Hardware cache unavailable")?;
+        hardware::restore(&db)
+    })
+    .await
+    .map_err(|_| "Hardware cache worker unavailable")?
+}
+#[tauri::command]
+async fn scan_hardware(
+    state: tauri::State<'_, DesktopState>,
+) -> Result<hardware::Hardware, String> {
+    let path = state.hardware_path.clone();
+    let lock = state.hardware_lock.clone();
+    let log = state.log_dir.join("hardware-support.log");
+    tauri::async_runtime::spawn_blocking(move || {
+        // Serialize native requests across webview reloads as well as ordinary rescans.
+        let _guard = lock.lock().map_err(|_| "Hardware scan unavailable")?;
+        let scan = hardware::scan();
+        // Diagnostics contain only reviewed category codes, never raw provider values/errors.
+        let codes = match &scan {
+            Ok(s) => s.unavailable.join(", "),
+            Err(_) => "scan-unavailable".into(),
+        };
+        let mut cache_failed = false;
+        if let Ok(s) = &scan {
+            cache_failed = rusqlite::Connection::open(path)
+                .map_err(|_| "cache-unavailable".to_string())
+                .and_then(|db| hardware::save(&db, s))
+                .is_err();
+        }
+        let _ = fs::write(
+            log,
+            format!(
+                "app={} unavailable={} cache={}\n",
+                env!("CARGO_PKG_VERSION"),
+                codes,
+                if cache_failed { "unavailable" } else { "ok" }
+            ),
+        );
+        scan
+    })
+    .await
+    .map_err(|_| "Hardware scan worker unavailable")?
 }
 #[tauri::command]
 fn load_development_build(
@@ -174,6 +226,8 @@ pub fn run() {
                 ),
             };
             app.manage(DesktopState {
+                hardware_path: app.path().app_local_data_dir()?.join("hardware.sqlite3"),
+                hardware_lock: std::sync::Arc::new(Mutex::new(())),
                 build_path: app
                     .path()
                     .app_local_data_dir()?
@@ -226,6 +280,8 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            scan_hardware,
+            load_hardware_scan,
             load_catalog_snapshot,
             desktop_status,
             set_viewer_fullscreen,

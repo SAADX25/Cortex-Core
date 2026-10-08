@@ -65,6 +65,7 @@ function InstalledVisual({
       userData={{ semanticId: slotId, partId: part.id, phase }}
       onClick={(e) => {
         e.stopPropagation();
+        if (e.delta > 5) return;
         onSelect(slotId);
       }}
     >

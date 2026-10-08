@@ -1,87 +1,52 @@
-import { useQuery } from '@tanstack/react-query';
-import { getDesktopStatus, isDesktop, openDocumentation } from './platform';
+import { version } from '../../../package.json';
+import { isDesktop } from './platform';
 export default function Settings() {
-  const status = useQuery({
-    queryKey: ['desktop-status'],
-    queryFn: getDesktopStatus,
-    enabled: isDesktop,
-  });
-  const data = status.data;
   return (
     <main className="settings-page">
       <div className="eyebrow">APPLICATION</div>
       <h1>Settings</h1>
       <section className="settings-section">
-        <h2>Cortex Core Desktop</h2>
-        <p className="muted">Version {version} · Unsigned development build</p>
+        <h2>Local hardware detection</h2>
+        <p className="muted">
+          Cortex Core reads hardware information on this Windows PC. Scans run at startup and when
+          you choose Rescan Hardware.
+        </p>
         <dl className="spec-list">
           <div>
-            <dt>Runtime</dt>
-            <dd>{isDesktop ? 'Tauri 2 / WebView2' : 'Browser test renderer'}</dd>
+            <dt>Privacy</dt>
+            <dd>Local only · No automatic uploads</dd>
           </div>
           <div>
-            <dt>Hardware catalog</dt>
-            <dd>{data?.catalogVersion ?? '2026.10.07.1'} · Fictional fixtures</dd>
+            <dt>Last successful scan</dt>
+            <dd>Cached locally for faster startup</dd>
           </div>
           <div>
-            <dt>Asset manifest</dt>
-            <dd>v{data?.assetManifestVersion ?? 1}</dd>
+            <dt>Identification</dt>
+            <dd>No serial numbers, product keys or network addresses</dd>
           </div>
-          <div>
-            <dt>Offline catalog</dt>
-            <dd>{data?.cacheStatus ?? (isDesktop ? 'Checking…' : 'Bundled fixtures')}</dd>
-          </div>
-          {data && (
-            <>
-              <div>
-                <dt>Display scale</dt>
-                <dd>
-                  {data.scaleFactor}× · {data.windowWidth} × {data.windowHeight} pixels
-                </dd>
-              </div>
-              <div>
-                <dt>Application assets</dt>
-                <dd>{data.packaged ? 'Packaged locally' : 'Development server'}</dd>
-              </div>
-            </>
-          )}
         </dl>
-        {status.isError && <p role="status">Native diagnostics are unavailable.</p>}
       </section>
       <section className="settings-section">
-        <h2>3D asset cache</h2>
-        <p className="muted">0 bytes · The reference board is an original procedural template.</p>
-        <button className="button secondary" disabled>
-          Clear unused assets
-        </button>
+        <h2>3D visualization</h2>
         <p className="muted">
-          Cache management will become available with downloadable product assets. The hardware
-          database is stored separately.
+          Generic category templates illustrate detected devices. Appearance, layout and component
+          placement are illustrative; specifications come from your hardware. Exact models are not
+          available in this release.
         </p>
       </section>
       <section className="settings-section">
-        <h2>Updates & support</h2>
+        <h2>Cortex Core Desktop</h2>
+        <p className="muted">Version {version} · Unsigned development build</p>
         <p className="muted">
-          Application updates are not enabled in this development build. Catalog and asset versions
-          are independent.
+          {isDesktop
+            ? 'Tauri 2 · Rust · Windows WebView2'
+            : 'Browser preview · Hardware scanning requires Windows Desktop'}
         </p>
         <p className="muted">
-          Graphics failures record an app version, platform and failure code locally. No hardware
-          serial numbers, file paths or personal information are collected.
+          Hardware and graphics diagnostics are stored locally as category and failure codes.
+          Provider errors and hardware identifiers are not logged.
         </p>
-        <div className="settings-actions">
-          <button className="button secondary" onClick={() => void openDocumentation('tauri')}>
-            Desktop runtime documentation
-          </button>
-          <button
-            className="button secondary"
-            onClick={() => void openDocumentation('hardware-sources')}
-          >
-            3D format documentation
-          </button>
-        </div>
       </section>
     </main>
   );
 }
-import { version } from '../../../package.json';

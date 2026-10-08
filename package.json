@@ -26,7 +26,7 @@
     "desktop:build": "pnpm --filter @cortex/desktop build",
     "desktop:check": "pnpm --filter @cortex/desktop check:rust",
     "desktop:test": "pnpm --filter @cortex/desktop test:rust",
-    "test:desktop": "node tools/desktop/smoke.mjs && node tools/desktop/assembly-smoke.mjs",
+    "test:desktop": "node tools/desktop/smoke.mjs",
     "desktop:package": "pnpm desktop:build && node tools/desktop/package-release.mjs"
   },
   "dependencies": {

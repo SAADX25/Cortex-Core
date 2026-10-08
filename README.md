@@ -1,6 +1,6 @@
 # Cortex Core
 
-**Desktop assembly foundation — Phase 2** — a typed hardware platform built around reusable visual templates. This milestone uses five fictional development records and an original procedural ATX layout. No real product specifications or external 3D models are presented as verified hardware.
+**My PC — local Windows hardware detection.** Cortex Core automatically reads the hardware installed in your current PC, presents a clean desktop dashboard, and optionally illustrates the detected devices in a separate read-only 3D view. Scans and the last successful snapshot stay local and work offline. Generic visuals are explicitly labeled; Windows-reported specifications are never replaced with fixture data.
 
 ## Launch the desktop application
 
@@ -14,7 +14,7 @@ pnpm desktop:dev
 pnpm desktop:package
 ```
 
-See [desktop development, security and distribution](docs/desktop/development.md) [Phase 2 assembly](docs/desktop/assembly.md), and [Phase 2 validation](docs/desktop/phase-2-validation.md). `apps/web` is the development/browser-test renderer; `pnpm dev` serves it for tests, not for end users. Its optional `?graphics=off` and development-only `?debug=1` remain available. Motherboard selection, inspector, camera, exploded view, adaptive quality and accessible fallback share one implementation across both hosts.
+See [hardware sources, scanner limitations and milestone validation](docs/desktop/my-pc-milestone.md) and [desktop development, security and distribution](docs/desktop/development.md). `apps/web` is the development/browser-test renderer; ordinary browsers cannot scan a Windows PC. `?graphics=off` exercises the accessible hardware fallback. Main navigation contains only My PC, 3D View and Settings. Previous [assembly work](docs/desktop/assembly.md) remains isolated for possible future use.
 
 ## Workspace
 
@@ -51,10 +51,10 @@ The unit suite includes real PostgreSQL execution through PGlite: migration/seed
 
 The app runs without credentials. To provision a local Supabase environment, install the official Supabase CLI and Docker, then run `supabase start`, `supabase db reset`, and `supabase test db`. These services are not installed or remotely provisioned by this milestone. Development seed fixtures must not be loaded into a production catalog. Copy `.env.example` to `.env.local` and set the documented public URL/key and data-source flag only after the migration is applied.
 
-All domain tables have RLS. Public records require `is_public=true`; API roles have SELECT privileges only, and the catalog view is security-invoker. Secret/service-role credentials stay server-side. The import validator rejects invalid records and real specifications lacking field-level provenance. No unsafe HTML or network scraping is used. Remote private writes/authentication remain future work. The development build persists locally through the native SQLite boundary.
+All domain tables have RLS. Public records require `is_public=true`; API roles have SELECT privileges only, and the catalog view is security-invoker. Secret/service-role credentials stay server-side. The import validator rejects invalid records and real specifications lacking field-level provenance. This optional knowledge database is separate from detected devices. My PC never calls it or uploads specifications. Existing domain/build storage remains isolated through its native SQLite boundary.
 
 ## Current scope and later milestones
 
-The explorer renders one generic motherboard template; the other four categories demonstrate domain schemas and compatibility, not independent 3D viewers. Adaptive profiles apply DPR, antialiasing, shadows and detail bias; texture/post-processing/reflection settings are reserved policy fields because this scene uses no image textures or post-processing. GLB loading and optimization are supported seams, not a catalog of downloaded assets. CPU, individual DIMMs and M.2 2280 NVMe assembly are implemented with semantic previews, animations, occupied-slot rejection, explicit replace/remove, confirmed reset and local persistence. Memory/storage totals derive from the build domain. Exact CPU/BIOS certification and aggregate PSU power remain outside this milestone.
+Startup restores a versioned SQLite hardware snapshot, then performs one fresh background scan. Rescan is explicit; no continuous polling occurs. Six large dashboard cards open detailed inspectors, including individual adapters, DIMMs, physical disks and motherboard firmware. Copy Specifications writes a plain-text local report. 3D View lazily loads the retained demand renderer and generic CPU, memory, graphics and storage shapes derived from detected device counts. Appearance, socket, board form factor and physical placement are illustrative, with no exact-product claim. Adaptive quality, resource cleanup and board LOD remain in place.
 
-Next: complete Windows release hardening on clean Windows 10/11 machines, physical high-DPI/multi-monitor testing and a deliberate signing/update policy. GPU, PSU, case and cooling installation and large real-product ingestion remain deferred.
+Next: clean Windows 10/11 release hardening, physical high-DPI/multi-monitor testing, signing/update policy, and optional verified product metadata/exact models. No new PC Builder features are planned for this milestone.

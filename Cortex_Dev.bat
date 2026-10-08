@@ -7,7 +7,7 @@ cls
 echo.
 echo  +===================================================+
 echo  ^|        CORTEX CORE  --  Dev Launcher             ^|
-echo  ^|      Foundation + Motherboard Explorer            ^|
+echo  ^|          My PC + Hardware Detection                ^|
 echo  +===================================================+
 echo.
 echo  Choose an option:

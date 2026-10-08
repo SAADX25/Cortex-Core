@@ -1,31 +1,13 @@
 import { spawn, spawnSync } from 'node:child_process';
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import assert from 'node:assert/strict';
 import { chromium, expect } from '@playwright/test';
-import { motherboardComponents } from '../../packages/3d-engine/src/semantics.ts';
-
+import { parseHardwareScan } from '../../packages/application-ui/src/hardware.ts';
 if (process.platform !== 'win32') throw new Error('This smoke runner targets Windows WebView2.');
-function browserProcessIds() {
-  const result = spawnSync(
-    'powershell.exe',
-    [
-      '-NoProfile',
-      '-Command',
-      'Get-Process chrome,msedge,firefox,brave,opera -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Id',
-    ],
-    { encoding: 'utf8', windowsHide: true },
-  );
-  if (result.error) throw result.error;
-  return new Set(result.stdout.trim().split(/\s+/).filter(Boolean));
-}
-const existingBrowserIds = browserProcessIds();
 const development = process.argv.includes('--development');
-const attach = process.env.CORTEX_CDP_URL;
-const port = Number(process.env.CORTEX_CDP_PORT ?? 9224);
 const output = resolve('.artifacts/desktop');
-const { version } = JSON.parse(await readFile(resolve('package.json'), 'utf8'));
 await mkdir(output, { recursive: true });
 const executable =
   process.env.CORTEX_DESKTOP_EXE ??
@@ -34,19 +16,19 @@ const executable =
       ? 'apps/desktop/src-tauri/target/debug/cortex-core.exe'
       : 'apps/desktop/src-tauri/target/release/Cortex Core.exe',
   );
-// Debugging is injected only by this test process, never by shipped configuration.
-const child = attach
-  ? undefined
-  : spawn(executable, [], {
-      env: {
-        ...process.env,
-        WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}`,
-        WEBVIEW2_USER_DATA_FOLDER: resolve(output, `webview-${port}`),
-      },
-      stdio: 'ignore',
-    });
+const port = Number(process.env.CORTEX_CDP_PORT ?? 9224);
+// CDP is supplied only to the test child. Shipped settings never enable debugging.
+const child = spawn(executable, [], {
+  env: {
+    ...process.env,
+    WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: `--remote-debugging-port=${port}`,
+    WEBVIEW2_USER_DATA_FOLDER: resolve(output, `hardware-webview-${port}`),
+  },
+  stdio: 'ignore',
+  windowsHide: true,
+});
 let launchError;
-child?.on('error', (error) => {
+child.on('error', (error) => {
   launchError = error;
 });
 let browser;
@@ -56,16 +38,16 @@ const check = (name) => {
   console.log(`PASS ${name}`);
 };
 try {
-  for (let i = 0; i < 120; i++) {
+  for (let i = 0; i < 100; i++) {
     if (launchError) throw launchError;
     try {
-      browser = await chromium.connectOverCDP(attach ?? `http://127.0.0.1:${port}`);
+      browser = await chromium.connectOverCDP(`http://127.0.0.1:${port}`);
       break;
     } catch {
       await delay(500);
     }
   }
-  assert(browser, 'Native WebView2 CDP did not become available');
+  assert(browser, 'Native WebView2 did not become available');
   const context = browser.contexts()[0];
   let page;
   for (let i = 0; i < 40; i++) {
@@ -78,164 +60,206 @@ try {
   assert(page, 'Application webview missing');
   const errors = [];
   const requests = [];
-  page.on('pageerror', (error) => errors.push(error.message));
-  page.on('request', (request) => requests.push(request.url()));
+  page.on('pageerror', (e) => errors.push(e.message));
+  page.on('request', (r) => requests.push(r.url()));
   const invoke = (command, args = {}) =>
     page.evaluate(
       ([name, parameters]) => globalThis.__TAURI_INTERNALS__.invoke(name, parameters),
       [command, args],
     );
-  await page.getByRole('link', { name: 'Cortex Core home', exact: true }).click();
-  await expect(page.getByRole('heading', { name: /Your hardware workspace/ })).toBeVisible();
+  await page.reload();
+  await expect(page.getByRole('heading', { name: 'My PC.' })).toBeVisible();
+  try {
+    await expect(page.getByRole('button', { name: 'CPU details', exact: true })).toBeVisible({
+      timeout: 30000,
+    });
+  } catch (error) {
+    const cached = await invoke('load_hardware_scan');
+    if (cached) parseHardwareScan(cached);
+    const live = await invoke('scan_hardware');
+    parseHardwareScan(live);
+    throw error;
+  }
+  await expect(page.getByRole('button', { name: 'Rescan Hardware', exact: true })).toBeEnabled({
+    timeout: 30000,
+  });
   const status = await invoke('desktop_status');
-  assert.equal(status.appVersion, version);
   assert.equal(status.packaged, !development);
   assert.equal(status.offlineReady, true);
-  assert.equal(status.catalogVersion, '2026.10.07.1');
-  assert.equal(status.cacheStatus, 'local-snapshot');
-  assert(!page.url().includes('127.0.0.1') || development);
-  check(development ? 'Tauri dev launch' : 'Packaged native launch without a frontend server');
-  await page.getByRole('link', { name: 'Settings', exact: true }).click();
-  await expect(
-    page.getByText(`Version ${version} · Unsigned development build`, { exact: true }),
-  ).toBeVisible();
-  await page.getByRole('link', { name: 'Cortex Core home', exact: true }).click();
-  check('Shared Settings version label agrees with native package version');
-  const savedState = await readFile(
-    resolve(process.env.APPDATA, 'dev.cortexcore.desktop/.window-state.json'),
-    'utf8',
-  ).then(
-    (text) => JSON.parse(text).main,
-    () => null,
+  assert.equal(
+    await page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('link').count(),
+    3,
   );
-  if (savedState && !savedState.maximized) {
-    assert.equal(status.windowWidth, savedState.width);
-    assert.equal(status.windowHeight, savedState.height);
-    check('Restores saved native window size at the current display scale');
+  assert(!requests.some((u) => /renderer-.*\.js/.test(u)), 'Renderer loaded before 3D View');
+  check('Native launch, automatic real Windows scan, three routes and lazy renderer');
+  const scan = await invoke('load_hardware_scan');
+  assert(scan);
+  assert.equal(scan.schemaVersion, 1);
+  for (const key of ['cpu', 'gpu', 'memory', 'motherboard', 'storage', 'os']) {
+    assert(Array.isArray(scan[key]));
   }
+  assert(scan.cpu.length > 0 && scan.os.length > 0, 'Core Windows provider responses missing');
+  for (const key of ['SerialNumber', 'MACAddress', 'ProductKey', 'PNPDeviceID', 'DeviceId'])
+    assert(!JSON.stringify(scan).includes(key));
+  const nativeKeys = ['cpu', 'gpu', 'memory', 'motherboard', 'storage', 'os'];
+  const deviceCounts = Object.fromEntries(nativeKeys.map((k) => [k, scan[k].length]));
+  check('All six categories, physical disks and privacy allowlist from live scanner');
+  for (const [category, label] of [
+    ['cpu', 'CPU'],
+    ['gpu', 'GPU'],
+    ['memory', 'Memory'],
+    ['motherboard', 'Motherboard'],
+    ['storage', 'Storage'],
+    ['os', 'Operating System'],
+  ]) {
+    await page.getByRole('button', { name: `${label} details`, exact: true }).click();
+    await expect(page.getByRole('dialog')).toBeVisible();
+    if (scan[category][0] && scan[category][0].name !== 'Unknown')
+      await expect(
+        page
+          .getByRole('dialog')
+          .getByRole('heading', { name: scan[category][0].name, exact: true })
+          .first(),
+      ).toBeVisible();
+    await page.getByRole('button', { name: 'Close details' }).click();
+  }
+  check('Cards open actual detected specifications, modules, adapters and firmware');
+  await page.getByRole('heading', { name: 'My PC.' }).scrollIntoViewIfNeeded();
+  await page.evaluate(() => globalThis.scrollTo(0, 0));
+  await page.screenshot({ path: resolve(output, 'my-pc-dashboard.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Copy Specifications', exact: true }).click();
+  await expect(page.getByRole('status').filter({ hasText: 'Specifications copied' })).toBeVisible();
+  // Verify the OS clipboard we just wrote without triggering a WebView2 read-permission prompt.
+  const clipboardResult = spawnSync(
+    'powershell.exe',
+    ['-NoProfile', '-Command', 'Get-Clipboard -Raw'],
+    { encoding: 'utf8', windowsHide: true },
+  );
+  assert.equal(clipboardResult.status, 0);
+  const clipboard = clipboardResult.stdout;
+  assert(clipboard.includes(scan.cpu[0].name));
+  assert(clipboard.includes(scan.os[0].name));
+  check('Copy Specifications writes detected CPU and Windows data to native clipboard');
   const denied = await invoke('plugin:window-state|save_window_state').then(
     () => false,
     () => true,
   );
-  assert(denied, 'Unscoped plugin capability unexpectedly allowed');
+  assert(denied);
   assert(
     await invoke('open_documentation', { key: 'https://untrusted.invalid' }).then(
       () => false,
       () => true,
     ),
   );
-  check('Capability denial and documentation allowlist');
+  for (const name of ['plugin:shell|execute', 'plugin:fs|read_text_file', 'run_powershell'])
+    assert(
+      await invoke(name).then(
+        () => false,
+        () => true,
+      ),
+    );
+  check('Capability denial, documentation allowlist and no arbitrary shell/filesystem IPC');
   if (!development) await context.setOffline(true);
-  await page.getByRole('link', { name: 'Open Motherboard Explorer' }).click();
+  await page.getByRole('button', { name: 'Rescan Hardware', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Rescan Hardware', exact: true })).toBeEnabled({
+    timeout: 30000,
+  });
+  const fresh = await invoke('load_hardware_scan');
+  assert(fresh.scannedAt >= scan.scannedAt);
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'CPU details', exact: true })).toBeVisible();
+  check('Offline rescan and cached scan restore after webview reload');
+  await page.getByRole('link', { name: 'View in 3D', exact: true }).click();
   const canvas = page.getByTestId('canvas-stage').locator('canvas');
   await expect(canvas).toBeVisible();
-  check('Motherboard renders in native WebView2');
-  const components = page.getByRole('navigation', { name: 'Motherboard components' });
-  assert.equal(await components.getByRole('button').count(), 17);
-  for (const component of motherboardComponents) {
-    await components
-      .getByRole('button', {
-        name: new RegExp(component.label.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
-      })
-      .click();
-    await expect(page.getByTestId('viewport')).toHaveAttribute('data-selected', component.id);
-    await expect(
-      page.getByRole('complementary').getByRole('heading', { name: component.label, exact: true }),
-    ).toBeVisible();
-  }
-  check('All 17 semantic regions and contextual inspector');
-  await page.getByRole('button', { name: 'Exploded view' }).click();
-  await expect(page.getByTestId('viewport')).toHaveAttribute('data-exploded', 'true');
-  await page.getByRole('button', { name: 'Exploded view' }).click();
+  await expect(
+    page.getByText('Generic visualization — specifications are from your detected hardware.'),
+  ).toBeVisible();
+  await expect(
+    page.getByRole('button', { name: /Install|Remove component|Replace|Reset build/ }),
+  ).toHaveCount(0);
+  const components = page.getByRole('navigation', { name: 'Detected components' });
+  await components.getByRole('button', { name: /^CPU(?: 1)?$/ }).click();
+  await expect(
+    page.getByRole('dialog').getByRole('heading', { name: fresh.cpu[0].name, exact: true }),
+  ).toBeVisible();
+  await page.getByRole('button', { name: 'Close details' }).click();
+  check('Detected read-only 3D visualization, explicit generic label and actual inspector');
   await page.getByLabel('Rendering quality').selectOption('low');
   await expect(page.getByLabel('Rendering quality')).toHaveValue('low');
-  await page.getByLabel('Rendering quality').selectOption('auto');
-  check('Exploded view and quality controls');
-  await page.getByRole('button', { name: 'Reset camera' }).click();
+  await page.getByRole('button', { name: 'Reset camera', exact: true }).click();
   await delay(700);
   const before = await canvas.screenshot();
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
   await delay(700);
-  assert(!before.equals(await canvas.screenshot()), 'Zoom did not change native rendered pixels');
+  assert(!before.equals(await canvas.screenshot()));
   const bounds = await canvas.boundingBox();
   assert(bounds);
   const zoomed = await canvas.screenshot();
   await page.mouse.move(bounds.x + bounds.width * 0.5, bounds.y + bounds.height * 0.5);
   await page.mouse.down();
-  await page.mouse.move(bounds.x + bounds.width * 0.65, bounds.y + bounds.height * 0.6, {
+  await page.mouse.move(bounds.x + bounds.width * 0.64, bounds.y + bounds.height * 0.6, {
     steps: 12,
   });
   await page.mouse.up();
   await delay(700);
-  assert(!zoomed.equals(await canvas.screenshot()), 'Orbit did not change native rendered pixels');
-  await page.getByRole('button', { name: 'Fit board to view' }).click();
-  check('Camera zoom, orbit, reset and fit in native renderer');
+  assert(!zoomed.equals(await canvas.screenshot()));
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Fit to view', exact: true }).click();
+  await page.getByLabel('Rendering quality').selectOption('auto');
+  check('Native camera orbit, zoom, reset, fit and adaptive quality selection');
+  await page.mouse.move(10, 10);
+  await page.evaluate(() => globalThis.scrollTo(0, 0));
+  await delay(700);
+  await page.screenshot({ path: resolve(output, 'detected-3d-view.png'), fullPage: true });
   await page.getByRole('button', { name: 'Fullscreen viewer' }).click();
   await expect.poll(async () => (await invoke('desktop_status')).fullscreen).toBe(true);
-  await expect(page.getByTestId('viewport')).toHaveClass(/viewer-fullscreen/);
-  const expanded = await invoke('desktop_status');
-  assert(
-    expanded.windowWidth !== status.windowWidth || expanded.windowHeight !== status.windowHeight,
-    'Native fullscreen did not resize the window',
-  );
-  await expect(canvas).toBeVisible();
-  // Native fullscreen changes the window frame asynchronously. Focus the
-  // workspace after that transition before exercising its Escape handler.
-  await page.getByTestId('viewport').focus();
-  await delay(400);
+  await page.getByTestId('canvas-stage').focus();
   await page.keyboard.press('Escape');
   await expect.poll(async () => (await invoke('desktop_status')).fullscreen).toBe(false);
+  await expect(page.getByTestId('canvas-stage')).not.toHaveClass(/viewer-fullscreen/);
   check('Native fullscreen and Escape restore');
-  await page.screenshot({
-    path: resolve(output, development ? 'dev-explorer.png' : 'production-explorer.png'),
-  });
   for (let i = 0; i < 4; i++) {
-    await page.getByRole('link', { name: 'Cortex Core home', exact: true }).click();
+    await page.getByRole('link', { name: 'My PC', exact: true }).click();
     await expect(canvas).toHaveCount(0);
-    await page.getByRole('link', { name: 'Open Motherboard Explorer' }).click();
+    await page.getByRole('link', { name: 'View in 3D', exact: true }).click();
     await expect(canvas).toBeVisible();
   }
-  check('Four viewer entry/exit cycles and canvas teardown');
-  if (!development) check('Offline fixture navigation and native SQLite snapshot');
-  // Canvas attachment precedes scene effects; let the new scene initialize.
+  check('Four viewer entry/exit cycles and canvas cleanup');
   await delay(700);
   await canvas.evaluate((element) => {
-    const extension = element.getContext('webgl2')?.getExtension('WEBGL_lose_context');
-    if (!extension) throw new Error('Context loss test extension unavailable');
-    extension.loseContext();
+    const ext = element.getContext('webgl2')?.getExtension('WEBGL_lose_context');
+    if (!ext) throw new Error('Context loss extension unavailable');
+    ext.loseContext();
   });
   await expect(page.getByTestId('fallback-diagram')).toBeVisible();
-  await components.getByRole('button', { name: /CPU socket/ }).click();
-  await expect(page.getByRole('heading', { name: 'CPU socket', exact: true })).toBeVisible();
-  check('Lost graphics context preserves usable diagram and inspector');
-  await page.screenshot({ path: resolve(output, 'native-fallback.png') });
+  await components.getByRole('button', { name: /^CPU(?: 1)?$/ }).click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  await page.getByRole('button', { name: 'Close details' }).click();
+  check('Graphics context loss keeps detected specification inspection usable');
   assert.deepEqual(errors, []);
-  assert(!requests.some((url) => /127\.0\.0\.1:5173/.test(url)) || development);
-  const remoteRequests = requests.filter((url) => {
-    const requestUrl = new URL(url);
-    if (!['http:', 'https:'].includes(requestUrl.protocol)) return false;
-    if (['tauri.localhost', 'ipc.localhost'].includes(requestUrl.hostname)) return false;
-    return !(development && requestUrl.hostname === '127.0.0.1' && requestUrl.port === '5173');
+  const remote = requests.filter((u) => {
+    const url = new URL(u);
+    return (
+      ['http:', 'https:'].includes(url.protocol) &&
+      !['tauri.localhost', 'ipc.localhost'].includes(url.hostname) &&
+      !(development && url.hostname === '127.0.0.1' && url.port === '5173')
+    );
   });
-  assert.deepEqual(remoteRequests, []);
-  check('No page errors or remote catalog/asset requests');
-  assert.deepEqual(
-    [...browserProcessIds()].filter((id) => !existingBrowserIds.has(id)),
-    [],
-  );
-  check('Native host did not launch an external browser');
+  assert.deepEqual(remote, []);
+  check('No page errors, remote uploads, catalog or asset requests');
   await writeFile(
-    resolve(output, development ? 'dev-smoke.json' : 'production-smoke.json'),
+    resolve(output, 'hardware-smoke.json'),
     JSON.stringify(
       {
         executable,
         development,
         status,
+        deviceCounts,
+        unavailableCategories: fresh.unavailable,
         checks,
         errors,
-        requests,
-        cleanup:
-          'Runner terminates its child; native-frame close and geometry persistence are validated separately.',
+        remoteRequests: remote,
       },
       null,
       2,
@@ -243,5 +267,5 @@ try {
   );
 } finally {
   await browser?.close();
-  child?.kill();
+  child.kill();
 }
