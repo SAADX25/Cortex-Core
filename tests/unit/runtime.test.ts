@@ -18,7 +18,7 @@ import { useViewerStore } from '../../packages/application-ui/src/viewer/store';
 
 describe('asset manifests and templates', () => {
   it('validates all original templates', () =>
-    expect(assetManifestSchema.parse(originalManifest)).toHaveLength(13));
+    expect(assetManifestSchema.parse(originalManifest)).toHaveLength(17));
   it('rejects unclear permissions', () =>
     expect(
       assetManifestSchema.safeParse([{ ...originalManifest[0], allowedUse: ['modification'] }])

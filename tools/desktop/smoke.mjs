@@ -14,6 +14,7 @@ import {
   idle,
   scrubMotion,
 } from '../../tests/motion-probe.ts';
+import { resolveStorageVisual } from '../../packages/asset-runtime/src/storage-visuals.ts';
 import { cpuIdentity } from '../../packages/3d-engine/src/cpu-identity.ts';
 if (process.platform !== 'win32') throw new Error('This smoke runner targets Windows WebView2.');
 const development = process.argv.includes('--development');
@@ -230,6 +231,22 @@ try {
   );
   check('System-confirmed discrete cards only; exact detected memory and physical disk counts');
   await idle(page, 0);
+  const storageVisuals = (await metrics(page)).hardwareVisuals.filter(
+    (v) => v.category === 'storage',
+  );
+  for (const visual of storageVisuals) {
+    const disk = fresh.storage[visual.index];
+    const resolved = resolveStorageVisual(disk);
+    assert.equal(visual.storageFamily, resolved.family);
+    assert.equal(visual.storageLabel, disk.name);
+    assert.equal(visual.assetId, resolved.assetId);
+    assert.equal(
+      visual.storagePlacement,
+      'inventory',
+      'Scanner does not confirm motherboard storage mounting',
+    );
+  }
+  check('Native physical disk families, generic assets and detected storage labels');
   const nativeProfiles = await motionProfiles(page);
   await page.getByLabel('Rendering quality').selectOption('auto');
   check('Packaged Low / Standard / High motion intervals, CPU submission time and zero idle draws');
@@ -286,6 +303,14 @@ try {
         .getByRole('dialog')
         .getByRole('heading', { name: fresh[category][visual.index].name, exact: true }),
     ).toBeVisible();
+    if (category === 'storage') {
+      await expect(
+        page
+          .getByRole('dialog')
+          .getByText(resolveStorageVisual(fresh.storage[visual.index]).note, { exact: true }),
+      ).toBeVisible();
+      await expect(page.getByRole('dialog').locator('dl')).toContainText('Size');
+    }
     await page.getByRole('button', { name: 'Close details' }).click();
   }
   await page.getByRole('button', { name: 'Fit to view', exact: true }).click();

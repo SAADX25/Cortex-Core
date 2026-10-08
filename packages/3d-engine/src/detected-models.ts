@@ -406,7 +406,7 @@ export function boardModel(family: BoardFamily, detail: number): Model {
 }
 export function deviceModel(
   device: Pick<DetectedVisual, 'category' | 'placement'> &
-    Partial<Pick<DetectedVisual, 'name' | 'manufacturer'>>,
+    Partial<Pick<DetectedVisual, 'name' | 'manufacturer' | 'storageFamily'>>,
   detail: number,
 ): Model {
   const b = new Builder();
@@ -533,20 +533,63 @@ export function deviceModel(
       'metal',
       true,
     );
-  } else if (device.placement === 'm2') {
-    b.box([80, 1.2, 22], [0, 0, 0], 'substrate');
+  } else if (device.storageFamily === 'nvme' || device.placement === 'm2') {
+    // 2280-inspired module: the protocol alone does not prove its actual form factor.
+    b.box([80, 1.2, 22], [0, 0.6, 0], 'substrate', 0.15);
     b.repeated(
-      [12, 1.3, 14],
-      [-22, -5, 12, 28].map((x) => [x, 1.3, 0]),
+      [12, 1.5, 14],
+      [-17, 0, 17].map((x) => [x, 1.95, 0]),
       'chip',
     );
+    b.box([9, 1.5, 12], [-30, 1.95, 0], 'chip', 0.2);
     b.repeated(
-      [4, 0.2, 0.7],
-      Array.from({ length: 16 }, (_, i) => [-39, 0.8, -9.5 + i * 1.2]),
+      [5, 0.12, 0.8],
+      Array.from({ length: 16 }, (_, i): V => [-37.5, 1.3, -9.5 + i * 1.2]).filter(
+        (p) => p[2] < 3 || p[2] > 5,
+      ),
       'gold',
     );
+    b.ring(2.3, 0.6, [36, 1.26, 0], 'gold', [Math.PI / 2, 0, 0]);
+    if (detail)
+      b.repeated(
+        [2, 0.8, 1],
+        [-28, -24, 28, 31].map((x) => [x, 1.6, 8]),
+        'metal',
+      );
+  } else if (device.storageFamily === 'hdd') {
+    // Representative 3.5-inch enclosure proportions, scaled for the inventory tray.
+    b.box([58, 15, 84], [0, 7.5, 0], 'aluminum', 0.8);
+    b.box([56, 0.8, 82], [0, 15.4, 0], 'metal', 0.6);
+    // Raised top-plate ribs, recessed screw collars, SATA-style connector hint.
+    b.box([52, 0.35, 1], [0, 15.95, -35], 'aluminum', 0.1);
+    for (const x of [-25, 25]) b.box([0.8, 0.35, 64], [x, 15.95, 0], 'aluminum', 0.1);
+    const screws: V[] = [-24, 24].flatMap((x) => [-35, 0, 35].map((z) => [x, 16, z] as V));
+    b.repeated([3.4, 0.45, 3.4], screws, 'connector', true);
+    b.repeated([1.8, 0.55, 1.8], screws, 'metal', true);
+    b.box([36, 5, 3], [0, 3, 42], 'connector', 0.1);
+    b.repeated(
+      [1, 2.5, 0.3],
+      Array.from({ length: 20 }, (_, i) => [-15 + i * 1.5, 3, 43.6]),
+      'gold',
+    );
+  } else if (device.storageFamily === 'sata-ssd') {
+    // Thin 2.5-inch-style enclosure, distinct from the thicker metal HDD.
+    b.box([42, 4.5, 60], [0, 2.25, 0], 'black', 0.7);
+    b.box([40, 0.4, 58], [0, 4.65, 0], 'aluminum', 0.4);
+    b.box([30, 2.6, 2.5], [0, 1.7, 30], 'connector', 0.1);
+    b.repeated(
+      [0.75, 1.5, 0.2],
+      Array.from({ length: 20 }, (_, i) => [-13 + i * 1.25, 1.7, 31.3]),
+      'gold',
+    );
+    b.repeated(
+      [1.8, 0.35, 1.8],
+      [-18, 18].flatMap((x) => [-26, 26].map((z) => [x, 4.95, z] as V)),
+      'metal',
+      true,
+    );
   } else {
-    // Neutral inventory token, not a claim about drive dimensions or connection.
+    // Neutral fallback avoids asserting media type or interface.
     b.box([58, 7, 43], [0, 4, 0], 'aluminum', 1.1);
     b.box([54, 0.7, 39], [0, 8, 0], 'black', 0.5);
     b.box([35, 0.1, 24], [0, 8.4, 0], 'connector', 0.1);

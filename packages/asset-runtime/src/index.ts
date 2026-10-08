@@ -3,6 +3,7 @@ import { assetManifestSchema } from './manifest';
 export * from './manifest';
 export * from './resource-cache';
 export * from './detected-visuals';
+export * from './storage-visuals';
 
 export const templateRegistry = {
   'motherboard.atx.v1': { category: 'motherboard', revision: 1 },
@@ -18,6 +19,10 @@ export const templateRegistry = {
   'detected.memory.v2': { category: 'ram', revision: 2 },
   'detected.gpu.v2': { category: 'gpu', revision: 2 },
   'detected.storage.v2': { category: 'storage', revision: 2 },
+  'detected.storage.hdd.v3': { category: 'storage', revision: 3 },
+  'detected.storage.sata-ssd.v3': { category: 'storage', revision: 3 },
+  'detected.storage.nvme.v3': { category: 'storage', revision: 3 },
+  'detected.storage.unknown.v3': { category: 'storage', revision: 3 },
 } as const;
 export function resolveVisualTemplate(part: Part) {
   const id = part.visual.templateId;

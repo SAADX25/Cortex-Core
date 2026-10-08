@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { hardwareFixture } from '../hardware-fixture';
 import { motionProbeScript, idle, metrics, idleDraws } from '../motion-probe';
+import { resolveStorageVisual } from '@cortex/asset-runtime';
 async function mockScanner(page: Page, partial = false, scan = hardwareFixture) {
   await page.addInitScript(
     ({ scan, partial }) => {
@@ -418,4 +419,112 @@ test('immersive 1080p layout selects every mesh and has no page overflow', async
   await idle(page, 0);
   await idleDraws(page);
   await page.screenshot({ path: '.artifacts/motion/immersive-1080p.png' });
+});
+
+test('storage family shapes carry detected labels, pick exact disks and release resources', async ({
+  page,
+  browserName,
+}, info) => {
+  test.skip(browserName !== 'chromium', 'WebGL physical storage rendering check');
+  test.setTimeout(90000);
+  const storage = [
+    {
+      name: 'Mechanical test disk',
+      properties: { 'Media type': 'HDD', 'Bus type': 'SATA', 'Size (bytes)': '2000000000000' },
+    },
+    {
+      name: 'SATA test SSD',
+      properties: { 'Media type': 'SSD', 'Bus type': 'SATA', 'Size (bytes)': '1000000000000' },
+    },
+    {
+      name: 'KINGSTON SNVS500',
+      properties: { 'Media type': 'SSD', 'Bus type': 'NVMe', 'Size (bytes)': '500000000000' },
+    },
+    {
+      name: 'Unknown physical disk',
+      properties: {
+        'Media type': 'Unknown',
+        'Bus type': 'Unknown',
+        'Size (bytes)': '250000000000',
+      },
+    },
+  ];
+  await mockScanner(page, false, { ...hardwareFixture, storage });
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.addInitScript(motionProbeScript);
+  await page.goto('/?rendererMetrics=1#/3d');
+  await idle(page, 0);
+  await page.getByLabel('Rendering quality').selectOption('low');
+  await page.waitForFunction(() => window.__motionProbe.metrics?.quality === 'low');
+  await idle(page, 0);
+  const before = await metrics(page);
+  const visuals = before.hardwareVisuals.filter((v) => v.category === 'storage');
+  expect(visuals).toHaveLength(4);
+  expect(visuals.map((v) => v.storageFamily)).toEqual(['hdd', 'sata-ssd', 'nvme', 'unknown']);
+  expect(visuals.every((v) => v.storagePlacement === 'inventory')).toBe(true);
+  for (let i = 0; i < storage.length; i++) {
+    const disk = storage[i]!;
+    expect(visuals[i]).toMatchObject({
+      storageLabel: disk.name,
+      assetId: resolveStorageVisual(disk).assetId,
+    });
+    const visual = (await metrics(page)).hardwareVisuals.find(
+      (v) => v.category === 'storage' && v.index === i,
+    )!;
+    const box = (await page.locator('canvas').boundingBox())!;
+    await page.mouse.click(
+      box.x + visual.projection[0]! * box.width,
+      box.y + visual.projection[1]! * box.height,
+    );
+    const inspector = page.getByRole('dialog');
+    await expect(inspector.getByRole('heading', { name: disk.name, exact: true })).toBeVisible();
+    await expect(
+      inspector.getByText(resolveStorageVisual(disk).note, { exact: true }),
+    ).toBeVisible();
+    await expect(inspector.locator('dl')).toContainText('Size');
+    await expect(inspector.locator('dl')).toContainText(['2 TB', '1 TB', '500 GB', '250 GB'][i]!);
+    await expect(inspector.locator('dl')).toContainText('Media type');
+    await expect(inspector.locator('dl')).toContainText('Bus type');
+    if (disk.properties['Bus type'] !== 'Unknown')
+      await expect(inspector.locator('dl')).toContainText(disk.properties['Bus type']);
+    if (i === 0 || i === 2) {
+      await page.getByRole('button', { name: 'Focus component', exact: true }).click();
+      await idle(page, 0);
+      await page
+        .locator('canvas')
+        .screenshot({ path: `.artifacts/motion/storage-focus-${i}-${info.project.name}.png` });
+      await page.getByRole('button', { name: 'Return to system', exact: true }).click();
+      await idle(page, 0);
+    } else await page.getByRole('button', { name: 'Close details' }).click();
+    await page.getByRole('button', { name: 'Fit to view', exact: true }).click();
+    await idle(page, 0);
+  }
+  await page
+    .locator('canvas')
+    .screenshot({ path: `.artifacts/motion/storage-families-${info.project.name}.png` });
+  const counts = (m: Awaited<ReturnType<typeof metrics>>) => ({
+    geometries: m.geometries,
+    textures: m.textures,
+    materials: m.materials,
+  });
+  const baseline = counts(await metrics(page));
+  for (let cycle = 0; cycle < 4; cycle++) {
+    await page.getByRole('button', { name: 'Exploded View', exact: true }).click();
+    await idle(page, 1);
+    await page.getByRole('button', { name: 'Reassemble', exact: true }).click();
+    await idle(page, 0);
+    await page.getByLabel('Rendering quality').selectOption('high');
+    await page.waitForFunction(() => window.__motionProbe.metrics?.quality === 'high');
+    await idle(page, 0);
+    await page.getByLabel('Rendering quality').selectOption('low');
+    await page.waitForFunction(() => window.__motionProbe.metrics?.quality === 'low');
+    await idle(page, 0);
+    expect(counts(await metrics(page))).toEqual(baseline);
+  }
+  await idleDraws(page);
+  await page.getByRole('link', { name: 'My PC', exact: true }).click();
+  await expect(page.locator('canvas')).toHaveCount(0);
+  await expect
+    .poll(() => page.evaluate(() => window.__motionProbe.disposed.at(-1)))
+    .toEqual({ activeHandles: 0, bindings: 0 });
 });

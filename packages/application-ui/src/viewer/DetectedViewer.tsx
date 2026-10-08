@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import { adapterClass, storagePlacement } from '@cortex/asset-runtime';
+import { adapterClass, storagePlacement, resolveStorageVisual } from '@cortex/asset-runtime';
 import {
   visualId,
   type MotionRequest,
@@ -109,7 +109,13 @@ export default function DetectedViewer({ scan }: { scan: HardwareScan }) {
                 index,
                 name: device.name,
                 manufacturer: device.properties.Manufacturer,
-                ...(category === 'storage' ? { placement: storagePlacement(device) } : {}),
+                ...(category === 'storage'
+                  ? {
+                      placement: storagePlacement(device),
+                      storageFamily: resolveStorageVisual(device).family,
+                      storageAssetId: resolveStorageVisual(device).assetId,
+                    }
+                  : {}),
               },
             ],
       ),
@@ -450,7 +456,7 @@ export default function DetectedViewer({ scan }: { scan: HardwareScan }) {
           {!!scan.storage.length && (
             <div className="storage-caption">
               Detected Storage · {scan.storage.length} physical devices
-              <small>Inventory · location and form factor unknown</small>
+              <small>Generic storage families · placement is illustrative</small>
             </div>
           )}
         </div>

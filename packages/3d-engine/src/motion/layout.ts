@@ -30,6 +30,6 @@ export function assembledPosition(
     case 'storage':
       return device.placement === 'm2'
         ? [-17, 5, pcieZ - 20]
-        : [layout.width / 2 + 56 + (ordinal % 2) * 68, 0, -35 + Math.floor(ordinal / 2) * 56];
+        : [layout.width / 2 + 66 + (ordinal % 2) * 94, 0, -35 + Math.floor(ordinal / 2) * 100];
   }
 }

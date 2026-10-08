@@ -1,3 +1,4 @@
+import { resolveStorageVisual } from './storage-visuals';
 /** Hardware identity is deliberately independent of visual identity. No product-name guessing. */
 export interface VisualDevice {
   name: string;
@@ -47,7 +48,9 @@ export function adapterClass(device: VisualDevice): AdapterClass {
 export function storagePlacement(device: VisualDevice): 'm2' | 'inventory' {
   // NVMe is a protocol, not a physical form factor. The current scanner does not
   // report a reliable form factor, so its NVMe disks correctly stay in inventory.
-  return device.properties['Form factor'] === 'M.2' && device.properties['Bus type'] === 'NVMe'
+  return resolveStorageVisual(device).family === 'nvme' &&
+    device.properties['Form factor'] === 'M.2' &&
+    device.properties['Bus type'] === 'NVMe'
     ? 'm2'
     : 'inventory';
 }

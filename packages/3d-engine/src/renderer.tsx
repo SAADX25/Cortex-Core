@@ -58,6 +58,9 @@ export interface SceneMetrics {
     cpuFamily?: string;
     cpuLabel?: string;
     cpuTemplate?: string;
+    storageFamily?: string;
+    storageLabel?: string;
+    storagePlacement?: string;
   }[];
   installedVisuals: {
     slotId: string;
@@ -566,6 +569,13 @@ function Scene({
                   cpuFamily: object.userData.cpuFamily,
                   cpuLabel: object.userData.cpuLabel,
                   cpuTemplate: object.userData.cpuTemplate,
+                }
+              : {}),
+            ...(object.userData.storageFamily
+              ? {
+                  storageFamily: object.userData.storageFamily,
+                  storageLabel: object.userData.storageLabel,
+                  storagePlacement: object.userData.storagePlacement,
                 }
               : {}),
             projection: [(center.x + 1) / 2, (1 - center.y) / 2],

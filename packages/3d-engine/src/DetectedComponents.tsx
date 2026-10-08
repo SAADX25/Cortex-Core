@@ -11,7 +11,12 @@ import {
   Vector3,
   Group,
 } from 'three';
-import { boardFamilies, resolveDetectedVisual, type BoardFamily } from '@cortex/asset-runtime';
+import {
+  boardFamilies,
+  resolveDetectedVisual,
+  type BoardFamily,
+  type StorageFamily,
+} from '@cortex/asset-runtime';
 import {
   boardModel,
   deviceModel,
@@ -24,6 +29,7 @@ import type { QualityLevel } from './quality';
 import type { Vector3Tuple } from './semantics';
 import { cpuIdentity } from './cpu-identity';
 import { createCpuMarking } from './cpu-marking';
+import { createStorageMarking, storageMarkingPlanes } from './storage-marking';
 import { assembledPosition } from './motion/layout';
 import { visualId, type MotionRequest, type VisualDefinition } from './motion/types';
 import type { MotionController } from './motion/controller';
@@ -34,6 +40,8 @@ export interface DetectedVisual {
   name: string;
   manufacturer?: string;
   placement?: 'm2' | 'inventory';
+  storageFamily?: StorageFamily;
+  storageAssetId?: string;
 }
 export interface DetectedScene {
   devices: DetectedVisual[];
@@ -166,16 +174,25 @@ function Device({
   ordinal: number;
   sceneBounds: VisualDefinition['sceneBounds'];
 }) {
-  const { category, placement, name, manufacturer } = device;
+  const { category, placement, name, manufacturer, storageFamily } = device;
   const model = useMemo(
-    () => deviceModel({ category, placement, name, manufacturer }, detail),
-    [category, placement, name, manufacturer, detail],
+    () => deviceModel({ category, placement, name, manufacturer, storageFamily }, detail),
+    [category, placement, name, manufacturer, storageFamily, detail],
   );
   const marking = useMemo(
-    () => (category === 'cpu' ? createCpuMarking(name, manufacturer) : null),
-    [category, name, manufacturer],
+    () =>
+      category === 'cpu'
+        ? createCpuMarking(name, manufacturer)
+        : category === 'storage'
+          ? createStorageMarking(name, storageFamily ?? 'unknown')
+          : null,
+    [category, name, manufacturer, storageFamily],
   );
   useEffect(() => () => marking?.dispose(), [marking]);
+  const markingPlane =
+    category === 'storage'
+      ? storageMarkingPlanes[storageFamily ?? 'unknown']
+      : { size: [26, 26] as [number, number], y: 3.43 };
   const identity = category === 'cpu' ? cpuIdentity(name, manufacturer) : null;
   const id = visualId(category, device.index, name);
   const materials = useMemo(createMaterials, []);
@@ -203,7 +220,14 @@ function Device({
         detectedCategory: device.category,
         detectedIndex: device.index,
         motionId: id,
-        assetId: resolveDetectedVisual(device.category).assetId,
+        assetId: device.storageAssetId ?? resolveDetectedVisual(device.category).assetId,
+        ...(category === 'storage'
+          ? {
+              storageFamily: storageFamily ?? 'unknown',
+              storageLabel: marking?.userData.storageLabel,
+              storagePlacement: placement ?? 'inventory',
+            }
+          : {}),
         ...(identity
           ? {
               cpuFamily: identity.family,
@@ -219,17 +243,31 @@ function Device({
     >
       <ModelMeshes model={model} materials={materials} />
       {marking && (
-        <mesh position={[0, 3.43, 0]} rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
-          <planeGeometry args={[26, 26]} />
-          <meshStandardMaterial
-            map={marking}
-            transparent
-            roughness={0.72}
-            metalness={0.15}
-            depthWrite={false}
-            polygonOffset
-            polygonOffsetFactor={-1}
-          />
+        <mesh
+          position={[0, markingPlane.y, 0]}
+          rotation={[-Math.PI / 2, 0, 0]}
+          raycast={() => null}
+        >
+          <planeGeometry args={markingPlane.size} />
+          {category === 'storage' ? (
+            <meshBasicMaterial
+              map={marking}
+              toneMapped={false}
+              depthWrite={false}
+              polygonOffset
+              polygonOffsetFactor={-1}
+            />
+          ) : (
+            <meshStandardMaterial
+              map={marking}
+              transparent
+              roughness={0.72}
+              metalness={0.15}
+              depthWrite={false}
+              polygonOffset
+              polygonOffsetFactor={-1}
+            />
+          )}
         </mesh>
       )}
       {selected && <Selection bounds={model.bounds} />}
@@ -321,10 +359,10 @@ export default function DetectedComponents({
       })}
       {storage.length > 0 && (
         <group
-          position={[layout.width / 2 + 90, -2, -9 + Math.floor((storage.length - 1) / 2) * 28]}
+          position={[layout.width / 2 + 113, -2, -35 + (Math.ceil(storage.length / 2) - 1) * 50]}
         >
           <mesh material={materials.tray} receiveShadow>
-            <boxGeometry args={[138, 2, Math.ceil(storage.length / 2) * 56 + 7]} />
+            <boxGeometry args={[194, 2, Math.ceil(storage.length / 2) * 100]} />
           </mesh>
         </group>
       )}

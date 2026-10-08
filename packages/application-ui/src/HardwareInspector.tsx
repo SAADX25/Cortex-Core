@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { bytes, categoryNames, type HardwareCategory, type HardwareScan } from './hardware';
 import { Icon } from './icons';
 import { cpuIdentity } from '@cortex/3d-engine';
-import { adapterClass } from '@cortex/asset-runtime';
+import { adapterClass, resolveStorageVisual, storagePlacement } from '@cortex/asset-runtime';
 export default function HardwareInspector({
   scan,
   category,
@@ -71,13 +71,17 @@ export default function HardwareInspector({
                   <strong>
                     {category === 'cpu'
                       ? cpuIdentity(d.name, d.properties.Manufacturer).note
-                      : category === 'gpu' && adapterClass(d) !== 'discrete'
-                        ? 'System information · no discrete card visual'
-                        : `Generic ${category === 'gpu' ? 'GPU' : category} visualization`}
+                      : category === 'storage'
+                        ? resolveStorageVisual(d).note
+                        : category === 'gpu' && adapterClass(d) !== 'discrete'
+                          ? 'System information · no discrete card visual'
+                          : `Generic ${category === 'gpu' ? 'GPU' : category} visualization`}
                   </strong>
                   <small>
                     {category === 'storage'
-                      ? 'Inventory only · physical location and form factor are unknown.'
+                      ? storagePlacement(d) === 'm2'
+                        ? 'Illustrative mounting · exact physical model and slot are not verified.'
+                        : 'Inventory placement · representative form only, not verified physical dimensions or location.'
                       : 'Illustrative shape · exact physical model is not verified.'}
                   </small>
                 </div>
