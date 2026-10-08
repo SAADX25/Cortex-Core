@@ -31,13 +31,16 @@ jobs:
       - run: pnpm exec playwright install --with-deps chromium firefox webkit
       - run: pnpm test:e2e
       - uses: actions/upload-artifact@v7
-        if: ${{ always() && hashFiles('playwright-report/**', 'test-results/**', 'apps/web/dist/budget-report.json') != '' }}
+        if: ${{ always() && hashFiles('playwright-report/**', 'test-results/**', 'apps/web/dist/budget-report.json', '.artifacts/motion/*.json') != '' }}
         with:
           name: validation-reports
+          include-hidden-files: true
           path: |
             playwright-report/
             test-results/
             apps/web/dist/budget-report.json
+            .artifacts/motion/*.json
+            .artifacts/motion/*.png
           retention-days: 14
   desktop-windows:
     runs-on: windows-latest

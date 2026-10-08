@@ -18,6 +18,9 @@ import type { Motherboard } from '@cortex/part-schema';
 import { resolveVisualTemplate } from '@cortex/asset-runtime';
 import InstalledComponents, { type AssemblyScene } from './InstalledComponents';
 import DetectedComponents, { type DetectedScene } from './DetectedComponents';
+import { MotionController, frameBounds } from './motion/controller';
+import { MotionBindings } from './motion/bindings';
+import { visualId } from './motion/types';
 import {
   motherboardComponents,
   type CameraAction,
@@ -41,6 +44,7 @@ const sceneColors = {
   capacitor: '#75878b',
 };
 export interface SceneMetrics {
+  motion: MotionController['diagnostics'];
   materials: number;
   geometryBytes: number;
   estimatedGpuBytes: number;
@@ -70,6 +74,7 @@ export interface SceneMetrics {
   textures: number;
   quality: QualityLevel;
   camera: string;
+  cpuRenderMs: number;
   projections: Record<string, [number, number]>;
 }
 export interface ExplorerRendererProps {
@@ -326,12 +331,16 @@ function Scene({
   onLevel,
   manager,
   pose,
+  motion,
+  bindings,
 }: {
   props: ExplorerRendererProps;
   level: QualityLevel;
   onLevel(level: QualityLevel): void;
   manager: AdaptiveQualityManager;
   pose: { current: CameraPose | null };
+  motion: MotionController;
+  bindings: MotionBindings;
 }) {
   const controls = useRef<ComponentRef<typeof OrbitControls>>(null);
   const hardwareRoot = useRef<Group>(null);
@@ -339,7 +348,15 @@ function Scene({
   const [lod, setLod] = useState(1);
   const lastFrame = useRef(0);
   const appliedRevision = useRef<number | null>(null);
-  const animation = useRef<{ position: Vector3; target: Vector3 } | null>(null);
+  const { size } = useThree();
+  useLayoutEffect(() => {
+    const request = props.detected?.motion;
+    if (request) {
+      motion.configure(request, props.reducedMotion, performance.now());
+      bindings.apply(motion);
+      invalidate();
+    }
+  }, [motion, bindings, props.detected?.motion, props.reducedMotion, invalidate]);
   const profile = qualityProfiles[level];
   const onFailure = props.onFailure;
   useEffect(() => {
@@ -354,13 +371,26 @@ function Scene({
   useEffect(() => {
     // Antialias changes replace the WebGL context. Retain the user's camera
     // unless a new explicit camera command was issued during the replacement.
-    if (pose.current?.revision === props.cameraCommand.revision) {
+    if (
+      pose.current?.revision === props.cameraCommand.revision &&
+      appliedRevision.current === null
+    ) {
       camera.position.fromArray(pose.current.position);
       controls.current?.target.fromArray(pose.current.target);
+      if (controls.current)
+        controls.current.maxDistance = Math.max(
+          1.4,
+          camera.position.distanceTo(controls.current.target) * 1.5,
+        );
+      (camera as PerspectiveCamera).far = Math.max(
+        10,
+        camera.position.distanceTo(new Vector3(...pose.current.target)) * 3,
+      );
+      camera.updateProjectionMatrix();
       controls.current?.update();
       appliedRevision.current = props.cameraCommand.revision;
       invalidate();
-      return;
+      if (!motion.cameraActive) return;
     }
     const selected = motherboardComponents.find((item) => item.id === props.selected);
     // Explicit camera commands cancel residual orbit momentum before fitting.
@@ -397,63 +427,80 @@ function Scene({
         ) / 1000;
       const portraitFactor = gl.domElement.clientHeight / Math.max(gl.domElement.clientWidth, 1);
       position = new Vector3(extent * Math.max(1, portraitFactor), extent * 1.35, extent * 1.2);
-      if (props.detected && hardwareRoot.current) {
-        hardwareRoot.current.updateWorldMatrix(true, true);
-        const bounds = new Box3().setFromObject(hardwareRoot.current);
-        if (!bounds.isEmpty()) {
-          target = bounds.getCenter(new Vector3());
-          // Fit the projected corners, including cards and the inventory tray.
-          // A single max-dimension heuristic leaves excessive empty space on wide canvases.
-          const direction = new Vector3(0.28, 0.82, 0.42).normalize();
-          const right = new Vector3().crossVectors(new Vector3(0, 1, 0), direction).normalize();
-          const up = new Vector3().crossVectors(direction, right).normalize();
-          const perspective = camera as PerspectiveCamera;
-          perspective.aspect = gl.domElement.clientWidth / Math.max(1, gl.domElement.clientHeight);
-          perspective.updateProjectionMatrix();
-          const vertical = Math.tan((perspective.fov * Math.PI) / 360),
-            horizontal = vertical * perspective.aspect;
-          let distance = 0;
-          const visualBounds: Box3[] = [];
-          hardwareRoot.current.traverse((o) => {
-            if ('geometry' in o) visualBounds.push(new Box3().setFromObject(o));
-          });
-          for (const box of visualBounds)
-            for (const x of [box.min.x, box.max.x])
-              for (const y of [box.min.y, box.max.y])
-                for (const z of [box.min.z, box.max.z]) {
-                  const point = new Vector3(x, y, z).sub(target);
-                  distance = Math.max(
-                    distance,
-                    Math.abs(point.dot(right)) / horizontal + point.dot(direction),
-                    Math.abs(point.dot(up)) / vertical + point.dot(direction),
-                  );
-                }
-          position = target.clone().addScaledVector(direction, distance * 1.045);
-        }
+    }
+    if (props.detected) {
+      const from = {
+        position: camera.position.toArray() as Vector3Tuple,
+        target: (controls.current?.target.toArray() ?? [0, 0.012, 0]) as Vector3Tuple,
+      };
+      const selected = props.detected.selected;
+      const device =
+        selected?.category === 'motherboard'
+          ? { name: props.detected.boardName, index: 0 }
+          : props.detected.devices.find(
+              (d) => d.category === selected?.category && d.index === selected?.index,
+            );
+      const id =
+        device && selected ? visualId(selected.category, device.index, device.name) : undefined;
+      const focusBounds = props.cameraCommand.action === 'focus' && id ? motion.bounds(id) : [];
+      if (props.cameraCommand.action !== 'zoom-in' && props.cameraCommand.action !== 'zoom-out') {
+        if (props.cameraCommand.action === 'focus' && !focusBounds.length) return;
+        const framed = frameBounds(
+          focusBounds.length ? focusBounds : motion.bounds(),
+          from,
+          (camera as PerspectiveCamera).fov,
+          size.width / Math.max(1, size.height),
+          props.cameraCommand.action === 'reset' || props.cameraCommand.revision === 0,
+        );
+        position.fromArray(framed.position);
+        target.fromArray(framed.target);
       }
     }
     appliedRevision.current = props.cameraCommand.revision;
-    if (props.reducedMotion) {
-      camera.position.copy(position);
-      controls.current?.target.copy(target);
-      controls.current?.update();
-    } else animation.current = { position, target };
+    if (controls.current)
+      controls.current.maxDistance = Math.max(1.4, position.distanceTo(target) * 1.5);
+    (camera as PerspectiveCamera).far = Math.max(10, position.distanceTo(target) * 3);
+    camera.updateProjectionMatrix();
+    motion.startCamera(
+      {
+        position: camera.position.toArray() as Vector3Tuple,
+        target: (controls.current?.target.toArray() ?? [0, 0.012, 0]) as Vector3Tuple,
+      },
+      { position: position.toArray() as Vector3Tuple, target: target.toArray() as Vector3Tuple },
+      performance.now(),
+      props.reducedMotion,
+      props.detected?.motion?.entrance && props.cameraCommand.revision === 0 ? 800 : 620,
+    );
+    bindings.apply(motion);
     invalidate();
-    // Selection only changes the camera when the user requests focus.
+    // Commands and viewport changes retarget the sole camera track from its actual pose.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [props.cameraCommand.revision, props.reducedMotion, camera, gl, invalidate]);
-  useFrame((state, delta) => {
+  }, [
+    props.cameraCommand.revision,
+    props.reducedMotion,
+    camera,
+    gl,
+    invalidate,
+    size.width,
+    size.height,
+  ]);
+  useFrame((state) => {
     const now = performance.now();
     const gap = now - lastFrame.current;
     lastFrame.current = now;
-    if (animation.current && controls.current) {
-      const factor = 1 - Math.exp(-Math.min(delta, 0.05) * 10);
-      camera.position.lerp(animation.current.position, factor);
-      controls.current.target.lerp(animation.current.target, factor);
+    const wasActive = motion.activeHandles > 0;
+    const active = motion.tick(now);
+    bindings.apply(motion);
+    const cameraPose = motion.consumeCamera();
+    if (cameraPose && controls.current) {
+      camera.position.fromArray(cameraPose.position);
+      controls.current.target.fromArray(cameraPose.target);
+      controls.current.enableDamping = false;
       controls.current.update();
-      if (camera.position.distanceTo(animation.current.position) < 0.0005) animation.current = null;
-      else invalidate();
+      controls.current.enableDamping = true;
     }
+    // One final frame lets finite contact baking observe the completed transforms.
+    if (active || wasActive) invalidate();
     if (props.quality === 'auto') {
       const next = manager.sample(gap, now, state.internal.frames > 1);
       if (next !== level) onLevel(next);
@@ -475,7 +522,9 @@ function Scene({
       .map((v) => v.toFixed(3))
       .join(',');
     // Capture completed-frame statistics, after replacement buffers upload.
+    const renderStart = performance.now();
     gl.render(scene, camera);
+    const cpuRenderMs = performance.now() - renderStart;
     if (props.diagnostics) {
       const materials = new Set<string>();
       const pbrPalette = new Set<string>();
@@ -545,6 +594,8 @@ function Scene({
         (profile.effects ? 512 ** 2 * 16 : 0) +
         pixels * 8 * (samples + 1);
       props.onMetrics({
+        motion: motion.diagnostics,
+        cpuRenderMs,
         materials: materials.size,
         geometryBytes,
         estimatedGpuBytes,
@@ -614,7 +665,15 @@ function Scene({
             <Region key={descriptor.id} descriptor={descriptor} props={props} />
           ))}
         {!props.detected && <Decorations lod={lod} />}
-        {props.detected && <DetectedComponents scene={props.detected} level={level} lod={lod} />}
+        {props.detected && (
+          <DetectedComponents
+            scene={props.detected}
+            level={level}
+            lod={lod}
+            engine={motion}
+            bindings={bindings}
+          />
+        )}
         {props.assembly && (
           <InstalledComponents
             assembly={props.assembly}
@@ -649,7 +708,7 @@ function Scene({
         </mesh>
       )}
       {props.detected && profile.effects && (
-        <StudioContact key={`${level}-${props.detected.devices.length}`} />
+        <StudioContact motion={motion} key={`${level}-${props.detected.devices.length}`} />
       )}
       <OrbitControls
         ref={controls}
@@ -661,7 +720,7 @@ function Scene({
         maxPolarAngle={Math.PI * 0.85}
         target={[0, 0.012, 0]}
         onStart={() => {
-          animation.current = null;
+          motion.cancelCamera();
         }}
       />
     </>
@@ -671,6 +730,23 @@ export default function ExplorerRenderer(props: ExplorerRendererProps) {
   if (props.board) resolveVisualTemplate(props.board);
   const manager = useMemo(() => new AdaptiveQualityManager(), []);
   const pose = useRef<CameraPose | null>(null);
+  const [motion] = useState(() => new MotionController());
+  const [bindings] = useState(() => new MotionBindings());
+  const [lifetime] = useState(() => ({ generation: 0 }));
+  useEffect(() => {
+    const generation = ++lifetime.generation;
+    return () =>
+      queueMicrotask(() => {
+        if (lifetime.generation !== generation) return;
+        motion.dispose();
+        bindings.clear();
+        window.dispatchEvent(
+          new CustomEvent('cortex-motion-disposed', {
+            detail: { activeHandles: motion.activeHandles, bindings: bindings.size },
+          }),
+        );
+      });
+  }, [motion, bindings, lifetime]);
   const [autoLevel, setAutoLevel] = useState<QualityLevel>('medium');
   const level = props.quality === 'auto' ? autoLevel : props.quality;
   const profile = qualityProfiles[level];
@@ -688,7 +764,15 @@ export default function ExplorerRenderer(props: ExplorerRendererProps) {
       }}
       camera={{ position: [0.32, 0.4, 0.36], fov: 42, near: 0.001, far: 10 }}
     >
-      <Scene props={props} level={level} onLevel={setAutoLevel} manager={manager} pose={pose} />
+      <Scene
+        props={props}
+        level={level}
+        onLevel={setAutoLevel}
+        manager={manager}
+        pose={pose}
+        motion={motion}
+        bindings={bindings}
+      />
     </Canvas>
   );
 }

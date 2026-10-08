@@ -343,6 +343,107 @@
 .detected-stage canvas {
   display: block;
 }
+.motion-controls {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  border: 1px solid #ffffff12;
+  border-radius: 12px;
+  background: #192325;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+.motion-controls button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  padding: 7px 5px;
+  cursor: pointer;
+}
+.motion-controls button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.motion-controls .motion-toggle {
+  color: var(--text);
+}
+.motion-controls .motion-toggle[aria-pressed='true'] {
+  color: var(--accent);
+}
+.motion-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--muted);
+}
+.motion-controls input {
+  width: 120px;
+  accent-color: var(--accent);
+  cursor: pointer;
+}
+.motion-controls output {
+  min-width: 35px;
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+.motion-controls small {
+  margin-left: auto;
+  color: #81958a;
+  font-size: 11px;
+}
+.fullscreen-motion {
+  order: 2;
+  padding: 10px 14px;
+  max-height: 38dvh;
+  overflow: auto;
+  z-index: 2;
+}
+.detected-canvas {
+  height: 100%;
+  position: relative;
+  min-height: 0;
+}
+.detected-toolbar[hidden] {
+  display: none;
+}
+.fullscreen-motion .motion-controls {
+  margin: 6px 0;
+}
+.fullscreen-motion .detected-components {
+  grid-template-columns: repeat(5, minmax(150px, 1fr));
+  overflow: auto;
+  margin-top: 0;
+}
+.fullscreen-motion .component-group {
+  padding: 10px 6px;
+}
+.fullscreen-motion .component-entry {
+  padding: 6px;
+}
+.fullscreen-tools {
+  display: flex;
+  gap: 18px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 12px;
+}
+.fullscreen-tools button {
+  color: var(--text);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+.inspector-focus {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 24px;
+}
 .detected-components {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -544,11 +645,17 @@
   color: #819189;
 }
 .viewer-fullscreen.detected-stage {
+  display: flex;
+  flex-direction: column;
   position: fixed;
   inset: 0;
   z-index: 30;
   height: 100dvh;
   border-radius: 0;
+}
+.viewer-fullscreen .detected-canvas {
+  flex: 1;
+  height: auto;
 }
 .exit-fullscreen {
   position: absolute;

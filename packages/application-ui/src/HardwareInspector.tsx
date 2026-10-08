@@ -9,12 +9,14 @@ export default function HardwareInspector({
   deviceIndex,
   close,
   visualization = false,
+  focusComponent,
 }: {
   scan: HardwareScan;
   category: HardwareCategory;
   deviceIndex?: number;
   close(): void;
   visualization?: boolean;
+  focusComponent?(): void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -50,6 +52,11 @@ export default function HardwareInspector({
         </button>
       </div>
       <p className="muted inspector-source">Reported by Windows on this PC.</p>
+      {focusComponent && (
+        <button className="button secondary inspector-focus" onClick={focusComponent}>
+          <Icon name="focus" /> Focus component
+        </button>
+      )}
       {category === 'memory' && (
         <p className="inspector-total">Total installed: {bytes(scan.totalMemoryBytes)}</p>
       )}

@@ -4,7 +4,15 @@ import { resolve } from 'node:path';
 import { setTimeout as delay } from 'node:timers/promises';
 import assert from 'node:assert/strict';
 import { chromium, expect } from '@playwright/test';
+import { createServer } from 'node:net';
 import { parseHardwareScan } from '../../packages/application-ui/src/hardware.ts';
+import {
+  motionProbeScript,
+  motionProfiles,
+  motionCycles,
+  idle,
+  scrubMotion,
+} from '../../tests/motion-probe.ts';
 import { cpuIdentity } from '../../packages/3d-engine/src/cpu-identity.ts';
 if (process.platform !== 'win32') throw new Error('This smoke runner targets Windows WebView2.');
 const development = process.argv.includes('--development');
@@ -17,7 +25,15 @@ const executable =
       ? 'apps/desktop/src-tauri/target/debug/cortex-core.exe'
       : 'apps/desktop/src-tauri/target/release/Cortex Core.exe',
   );
-const port = Number(process.env.CORTEX_CDP_PORT ?? 9224);
+// A fresh port prevents attaching to a retired WebView2 from an earlier failed run.
+const reservation = createServer();
+await new Promise((ready, reject) => {
+  reservation.once('error', reject);
+  reservation.listen(0, '127.0.0.1', ready);
+});
+const availablePort = reservation.address().port;
+await new Promise((done, reject) => reservation.close((error) => (error ? reject(error) : done())));
+const port = Number(process.env.CORTEX_CDP_PORT ?? availablePort);
 // CDP is supplied only to the test child. Shipped settings never enable debugging.
 const child = spawn(executable, [], {
   env: {
@@ -29,6 +45,10 @@ const child = spawn(executable, [], {
   windowsHide: true,
 });
 let launchError;
+let childExit;
+child.on('exit', (code, signal) => {
+  childExit = { code, signal };
+});
 child.on('error', (error) => {
   launchError = error;
 });
@@ -50,6 +70,7 @@ try {
   }
   assert(browser, 'Native WebView2 did not become available');
   const context = browser.contexts()[0];
+  context.setDefaultTimeout(15000);
   let page;
   for (let i = 0; i < 40; i++) {
     page = context
@@ -176,6 +197,7 @@ try {
       globalThis.__cortexNativeMetrics = e.detail;
     });
   });
+  await page.evaluate(motionProbeScript);
   await page.getByRole('link', { name: 'View in 3D', exact: true }).click();
   const canvas = page.getByTestId('canvas-stage').locator('canvas');
   await expect(canvas).toBeVisible();
@@ -206,51 +228,10 @@ try {
     fresh.storage.length,
   );
   check('System-confirmed discrete cards only; exact detected memory and physical disk counts');
-  const nativeProfiles = [];
-  for (const level of ['low', 'medium', 'high']) {
-    await page.getByLabel('Rendering quality').selectOption(level);
-    await page.getByRole('button', { name: 'Fit to view', exact: true }).click();
-    await expect
-      .poll(() => page.evaluate(() => globalThis.__cortexNativeMetrics?.quality))
-      .toBe(level);
-    await delay(500);
-    const box = await canvas.boundingBox();
-    await page.evaluate(() => {
-      globalThis.__nativeFrames = [];
-      globalThis.__captureNativeFrames = true;
-      let last = 0;
-      const sample = (now) => {
-        if (!globalThis.__captureNativeFrames) return;
-        if (last) globalThis.__nativeFrames.push(now - last);
-        last = now;
-        globalThis.requestAnimationFrame(sample);
-      };
-      globalThis.requestAnimationFrame(sample);
-    });
-    await page.mouse.move(box.x + box.width * 0.48, box.y + box.height * 0.48);
-    await page.mouse.down();
-    await page.mouse.move(box.x + box.width * 0.62, box.y + box.height * 0.58, { steps: 32 });
-    await page.mouse.up();
-    await delay(700);
-    const performance = await page.evaluate(() => {
-      globalThis.__captureNativeFrames = false;
-      const frames = globalThis.__nativeFrames.sort((a, b) => a - b);
-      return {
-        samples: frames.length,
-        frameP50: frames[Math.floor(frames.length * 0.5)],
-        frameP95: frames[Math.floor(frames.length * 0.95)],
-      };
-    });
-    await expect(page.getByRole('dialog')).toHaveCount(0);
-    await page.getByRole('button', { name: 'Fit to view', exact: true }).click();
-    await delay(500);
-    nativeProfiles.push({
-      ...(await page.evaluate(() => globalThis.__cortexNativeMetrics)),
-      interaction: performance,
-    });
-  }
+  await idle(page, 0);
+  const nativeProfiles = await motionProfiles(page);
   await page.getByLabel('Rendering quality').selectOption('auto');
-  check('Packaged Low / Standard / High scene metrics and interaction frame intervals');
+  check('Packaged Low / Standard / High motion intervals, CPU submission time and zero idle draws');
   await expect(
     page.getByText('Generic visualization — specifications are from your detected hardware.'),
   ).toBeVisible();
@@ -276,13 +257,13 @@ try {
   await page.getByRole('button', { name: 'Reset camera', exact: true }).click();
   await delay(700);
   const before = await canvas.screenshot();
-  const fittedCamera = (await page.evaluate(() => globalThis.__cortexNativeMetrics)).camera;
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
   await delay(700);
   assert(!before.equals(await canvas.screenshot()));
   const bounds = await canvas.boundingBox();
   assert(bounds);
   const zoomed = await canvas.screenshot();
+  await page.getByRole('button', { name: 'Zoom out', exact: true }).click();
   await page.mouse.move(bounds.x + bounds.width * 0.5, bounds.y + bounds.height * 0.5);
   await page.mouse.down();
   await page.mouse.move(bounds.x + bounds.width * 0.64, bounds.y + bounds.height * 0.6, {
@@ -291,18 +272,24 @@ try {
   await page.mouse.up();
   await delay(700);
   assert(!zoomed.equals(await canvas.screenshot()));
+  assert(
+    (await page.evaluate(() => globalThis.__cortexNativeMetrics)).motion.cameraInterruptions > 0,
+    'Manual OrbitControls must cancel the active camera transition',
+  );
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.getByRole('button', { name: 'Fit to view', exact: true }).click();
   await delay(900);
-  const refittedCamera = (await page.evaluate(() => globalThis.__cortexNativeMetrics)).camera;
+  const refitted = await page.evaluate(() => globalThis.__cortexNativeMetrics);
+  await writeFile(resolve(output, 'refitted-camera.json'), JSON.stringify(refitted, null, 2));
   assert(
-    fittedCamera
-      .split(',')
-      .every(
-        (value, index) =>
-          Math.abs(Number(value) - Number(refittedCamera.split(',')[index])) < 0.003,
-      ),
-    'Fit must restore the product camera after orbit and zoom',
+    refitted.hardwareVisuals.every(
+      (visual) =>
+        visual.projection[0] > 0 &&
+        visual.projection[0] < 1 &&
+        visual.projection[1] > 0 &&
+        visual.projection[1] < 1,
+    ),
+    'Fit must frame every detected visual while preserving orbit orientation',
   );
   await page.getByLabel('Rendering quality').selectOption('auto');
   check('Native camera orbit, zoom, reset, fit and adaptive quality selection');
@@ -310,13 +297,52 @@ try {
   await page.evaluate(() => globalThis.scrollTo(0, 0));
   await delay(700);
   await page.screenshot({ path: resolve(output, 'detected-3d-view.png'), fullPage: true });
+  await page.getByRole('button', { name: 'Exploded View', exact: true }).click();
   await page.getByRole('button', { name: 'Fullscreen viewer' }).click();
   await expect.poll(async () => (await invoke('desktop_status')).fullscreen).toBe(true);
+  const fullscreenRail = page
+    .getByTestId('canvas-stage')
+    .getByRole('navigation', { name: 'Detected components' });
+  await fullscreenRail.getByRole('button', { name: /^CPU(?: 1)?$/ }).click();
+  await page.getByRole('button', { name: 'Focus component', exact: true }).click();
+  await idle(page, 1);
+  await page.getByRole('button', { name: 'Return to system', exact: true }).click();
+  await scrubMotion(page, 45);
+  const gpuIndex = fresh.gpu.findIndex((gpu) => gpu.properties['Adapter class'] === 'Discrete');
+  if (gpuIndex >= 0) {
+    await fullscreenRail
+      .getByRole('button', {
+        name: fresh.gpu.length > 1 ? 'GPU ' + (gpuIndex + 1) : 'GPU',
+        exact: true,
+      })
+      .click();
+    await expect(
+      page
+        .getByRole('dialog')
+        .getByRole('heading', { name: fresh.gpu[gpuIndex].name, exact: true }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Close details' }).click();
+  }
+  await page.getByRole('button', { name: 'Reassemble', exact: true }).click();
   await page.getByTestId('canvas-stage').focus();
   await page.keyboard.press('Escape');
   await expect.poll(async () => (await invoke('desktop_status')).fullscreen).toBe(false);
   await expect(page.getByTestId('canvas-stage')).not.toHaveClass(/viewer-fullscreen/);
-  check('Native fullscreen and Escape restore');
+  check(
+    'Native explode, scrub, CPU/GPU selection, focus, reassemble, fullscreen and Escape restore',
+  );
+  await idle(page, 0);
+  await page.bringToFront();
+  const motionLifecycle = await motionCycles(page, 25, async (completed, current) => {
+    await writeFile(
+      resolve(output, 'motion-cycle-progress.json'),
+      JSON.stringify({ completed, current }, null, 2),
+    );
+    console.log(`Motion resource cycles: ${completed}/25`);
+  });
+  check(
+    '25 packaged animated cycles retain geometry, texture and material counts with zero idle draws',
+  );
   await page.getByLabel('Rendering quality').selectOption('low');
   // Compare the same selection state; its outline owns one extra geometry.
   await components.getByRole('button', { name: /^CPU(?: 1)?$/ }).click();
@@ -327,20 +353,29 @@ try {
     textures: globalThis.__cortexNativeMetrics.textures,
   }));
   for (let i = 0; i < 4; i++) {
+    await page.getByRole('button', { name: 'Exploded View', exact: true }).click();
     await canvas.evaluate((element) => {
       globalThis.__previousContext = element.getContext('webgl2');
     });
     await page.getByRole('link', { name: 'My PC', exact: true }).click();
     await expect(canvas).toHaveCount(0);
     await expect
+      .poll(() => page.evaluate(() => globalThis.__motionProbe.disposed.at(-1)))
+      .toEqual({ activeHandles: 0, bindings: 0 });
+    await expect
       .poll(() => page.evaluate(() => globalThis.__previousContext.isContextLost()))
       .toBe(true);
     await page.evaluate(() => {
       globalThis.__cortexNativeMetrics = undefined;
+      globalThis.__motionProbe.metrics = undefined;
     });
     await page.getByRole('link', { name: 'View in 3D', exact: true }).click();
     await expect(canvas).toBeVisible();
+    await page.waitForFunction(() => globalThis.__motionProbe.metrics);
     await page.getByLabel('Rendering quality').selectOption('low');
+    if ((await page.evaluate(() => globalThis.__motionProbe.metrics.motion.targetAmount)) > 0)
+      await page.getByRole('button', { name: 'Reassemble', exact: true }).click();
+    await idle(page, 0);
     await components.getByRole('button', { name: /^CPU(?: 1)?$/ }).click();
     await expect(
       page.getByRole('dialog').getByRole('heading', { name: fresh.cpu[0].name, exact: true }),
@@ -397,6 +432,7 @@ try {
         })),
         renderer: nativeMetrics,
         nativeProfiles,
+        motionLifecycle,
         checks,
         errors,
         remoteRequests: remote,
@@ -405,6 +441,26 @@ try {
       2,
     ),
   );
+} catch (error) {
+  const failurePage = browser
+    ?.contexts()[0]
+    ?.pages()
+    .find((candidate) => candidate.url().includes('tauri.localhost'));
+  const probe =
+    failurePage && !failurePage.isClosed()
+      ? await failurePage
+          .evaluate(() => ({
+            metrics: globalThis.__motionProbe?.metrics,
+            history: globalThis.__motionProbe?.history,
+            events: globalThis.__motionProbe?.events,
+          }))
+          .catch(() => null)
+      : null;
+  await writeFile(
+    resolve(output, 'smoke-failure.json'),
+    JSON.stringify({ message: error.message, childExit, checks, probe }, null, 2),
+  );
+  throw error;
 } finally {
   await browser?.close();
   child.kill();

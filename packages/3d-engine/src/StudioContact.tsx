@@ -10,10 +10,11 @@ import {
   Vector2,
   WebGLRenderTarget,
 } from 'three';
+import type { MotionController } from './motion/controller';
 /** A finite, two-pass contact-occlusion bake. Every offscreen resource has an owner. */
-export default function StudioContact() {
+export default function StudioContact({ motion }: { motion?: MotionController }) {
   const plane = useRef<Mesh>(null),
-    done = useRef(false);
+    done = useRef<number | null>(null);
   const { scene, gl, invalidate } = useThree();
   const resources = useMemo(() => {
     const target = new WebGLRenderTarget(512, 512),
@@ -52,8 +53,18 @@ export default function StudioContact() {
     [resources],
   );
   useFrame(() => {
-    if (done.current || !plane.current) return;
-    done.current = true;
+    if (!plane.current) return;
+    // A moving object must not leave an assembled contact silhouette behind.
+    // Reuse the same targets and bake once after the authoritative poses settle.
+    if (motion?.visualActive) {
+      plane.current.visible = false;
+      done.current = null;
+      return;
+    }
+    plane.current.visible = true;
+    const revision = motion?.visualRevision ?? 0;
+    if (done.current === revision) return;
+    done.current = revision;
     const background = scene.background,
       override = scene.overrideMaterial,
       previousTarget = gl.getRenderTarget(),
