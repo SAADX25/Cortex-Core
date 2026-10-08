@@ -28,7 +28,7 @@ Selection, Fit, Reset and zoom use the same finite camera track. Fit preserves t
 
 The first viewer visit has a restrained settle and camera entrance. Session memory stores only the visited flag and explosion amount, so tab changes do not replay the component entrance. Reduced motion skips cinematic travel while keeping explosion, scrubbing, selection and isolation functional.
 
-Fullscreen contains the motion controls, component rail, inspector, Fit/Reset and quality selector. Canvas resizing retargets framing; quality changes preserve current device transforms and camera position rather than resetting an in-flight transition.
+Fullscreen contains the motion controls, optional Components chooser, inspector, Fit/Reset and quality selector. Canvas resizing retargets framing; quality changes preserve current device transforms and camera position rather than resetting an in-flight transition.
 
 ## Demand rendering and resource lifecycle
 

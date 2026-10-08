@@ -76,6 +76,10 @@ test('reversal, focus, orbit cancellation, quality replacement, fullscreen and m
   for (let i = 0; i < 6; i++) await toggle.click();
   await toggle.click();
   await page.getByLabel('Rendering quality').selectOption('high');
+  await page
+    .getByRole('button', { name: 'Components', exact: true })
+    .filter({ visible: true })
+    .click();
   await rail.getByRole('button', { name: 'CPU', exact: true }).click();
   await page.getByRole('button', { name: 'Focus component', exact: true }).click();
   await idle(page, 1);
@@ -84,6 +88,10 @@ test('reversal, focus, orbit cancellation, quality replacement, fullscreen and m
   expect(motion.visuals.find((v) => v.id.startsWith('motherboard:'))?.intensity).toBe(0.38);
   await idleDraws(page);
   await page.getByRole('button', { name: 'Return to system', exact: true }).click();
+  await page
+    .getByRole('button', { name: 'Components', exact: true })
+    .filter({ visible: true })
+    .click();
   await rail.getByRole('button', { name: 'GPU 2', exact: true }).click();
   await page.getByRole('button', { name: 'Close details' }).click();
   await page.getByLabel('Rendering quality').selectOption('low');
@@ -109,7 +117,11 @@ test('reversal, focus, orbit cancellation, quality replacement, fullscreen and m
   expect(motion.visuals.every((v) => v.intensity === 1)).toBe(true);
   await page.getByRole('button', { name: 'Reassemble', exact: true }).click();
   await page.getByRole('button', { name: 'Fullscreen viewer', exact: true }).click();
-  await expect(rail.getByRole('button', { name: 'CPU', exact: true })).toBeVisible();
+  await expect(rail).toHaveCount(0);
+  await page
+    .getByRole('button', { name: 'Components', exact: true })
+    .filter({ visible: true })
+    .click();
   await rail.getByRole('button', { name: 'CPU', exact: true }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   await page.getByRole('button', { name: 'Close details' }).click();
@@ -168,6 +180,10 @@ test('reduced motion retains immediate exploded poses, scrub, selection and focu
     expect(exploded[i]!.settle).toBe(0);
   }
   const rail = page.getByRole('navigation', { name: 'Detected components' });
+  await page
+    .getByRole('button', { name: 'Components', exact: true })
+    .filter({ visible: true })
+    .click();
   await rail.getByRole('button', { name: 'Memory 2', exact: true }).click();
   await page.getByRole('button', { name: 'Focus component', exact: true }).click();
   await idle(page, 1);

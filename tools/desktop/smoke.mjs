@@ -8,6 +8,7 @@ import { createServer } from 'node:net';
 import { parseHardwareScan } from '../../packages/application-ui/src/hardware.ts';
 import {
   motionProbeScript,
+  metrics,
   motionProfiles,
   motionCycles,
   idle,
@@ -239,6 +240,10 @@ try {
     page.getByRole('button', { name: /Install|Remove component|Replace|Reset build/ }),
   ).toHaveCount(0);
   const components = page.getByRole('navigation', { name: 'Detected components' });
+  await page
+    .getByRole('button', { name: 'Components', exact: true })
+    .filter({ visible: true })
+    .click();
   await components.getByRole('button', { name: /^CPU(?: 1)?$/ }).click();
   await expect(
     page.getByRole('dialog').getByRole('heading', { name: fresh.cpu[0].name, exact: true }),
@@ -252,6 +257,68 @@ try {
   ).toBeVisible();
   await page.getByRole('button', { name: 'Close details' }).click();
   check('Detected read-only 3D visualization, explicit generic label and actual inspector');
+  await expect(components).toHaveCount(0);
+  assert(
+    await page.evaluate(
+      () => globalThis.document.documentElement.scrollWidth <= globalThis.innerWidth,
+    ),
+    'No horizontal viewer overflow',
+  );
+  if (await page.evaluate(() => globalThis.innerWidth >= 1100 && globalThis.innerHeight >= 800))
+    assert(
+      await page.evaluate(
+        () => globalThis.document.documentElement.scrollHeight <= globalThis.innerHeight,
+      ),
+      'Desktop viewer fits the application window',
+    );
+  for (const category of ['cpu', 'gpu', 'memory', 'storage']) {
+    await page.getByRole('button', { name: 'Fit to view', exact: true }).click();
+    await idle(page, 0);
+    const visual = (await metrics(page)).hardwareVisuals.find((v) => v.category === category);
+    if (!visual) continue; // Real hardware may have no reported discrete adapter or storage.
+    const bounds = await canvas.boundingBox();
+    await page.mouse.click(
+      bounds.x + visual.projection[0] * bounds.width,
+      bounds.y + visual.projection[1] * bounds.height,
+    );
+    await expect(
+      page
+        .getByRole('dialog')
+        .getByRole('heading', { name: fresh[category][visual.index].name, exact: true }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Close details' }).click();
+  }
+  await page.getByRole('button', { name: 'Fit to view', exact: true }).click();
+  await idle(page, 0);
+  const boardVisual = (await metrics(page)).hardwareVisuals.find(
+    (v) => v.category === 'motherboard',
+  );
+  const boardBox = await canvas.boundingBox();
+  let boardPicked = false;
+  for (const [dx, dy] of [
+    [-0.12, -0.12],
+    [-0.16, 0.08],
+    [0.12, 0.12],
+    [0.16, -0.08],
+    [0, -0.18],
+  ]) {
+    await page.mouse.click(
+      boardBox.x + (boardVisual.projection[0] + dx) * boardBox.width,
+      boardBox.y + (boardVisual.projection[1] + dy) * boardBox.height,
+    );
+    const dialog = page.getByRole('dialog');
+    if (await dialog.count()) {
+      boardPicked =
+        (await dialog.getByRole('heading', { name: 'Motherboard', exact: true }).count()) > 0;
+      await page.getByRole('button', { name: 'Close details' }).click();
+      await page.getByRole('button', { name: 'Fit to view', exact: true }).click();
+      await idle(page, 0);
+      if (boardPicked) break;
+    }
+  }
+  assert(boardPicked, 'Motherboard mesh remains inspectable');
+  check('Native CPU/GPU/memory/storage mesh inspection and closed-default component chooser');
+
   await page.getByLabel('Rendering quality').selectOption('low');
   await expect(page.getByLabel('Rendering quality')).toHaveValue('low');
   await page.getByRole('button', { name: 'Reset camera', exact: true }).click();
@@ -303,6 +370,10 @@ try {
   const fullscreenRail = page
     .getByTestId('canvas-stage')
     .getByRole('navigation', { name: 'Detected components' });
+  await page
+    .getByRole('button', { name: 'Components', exact: true })
+    .filter({ visible: true })
+    .click();
   await fullscreenRail.getByRole('button', { name: /^CPU(?: 1)?$/ }).click();
   await page.getByRole('button', { name: 'Focus component', exact: true }).click();
   await idle(page, 1);
@@ -310,6 +381,10 @@ try {
   await scrubMotion(page, 45);
   const gpuIndex = fresh.gpu.findIndex((gpu) => gpu.properties['Adapter class'] === 'Discrete');
   if (gpuIndex >= 0) {
+    await page
+      .getByRole('button', { name: 'Components', exact: true })
+      .filter({ visible: true })
+      .click();
     await fullscreenRail
       .getByRole('button', {
         name: fresh.gpu.length > 1 ? 'GPU ' + (gpuIndex + 1) : 'GPU',
@@ -345,6 +420,10 @@ try {
   );
   await page.getByLabel('Rendering quality').selectOption('low');
   // Compare the same selection state; its outline owns one extra geometry.
+  await page
+    .getByRole('button', { name: 'Components', exact: true })
+    .filter({ visible: true })
+    .click();
   await components.getByRole('button', { name: /^CPU(?: 1)?$/ }).click();
   await page.getByRole('button', { name: 'Close details' }).click();
   await delay(700);
@@ -376,6 +455,10 @@ try {
     if ((await page.evaluate(() => globalThis.__motionProbe.metrics.motion.targetAmount)) > 0)
       await page.getByRole('button', { name: 'Reassemble', exact: true }).click();
     await idle(page, 0);
+    await page
+      .getByRole('button', { name: 'Components', exact: true })
+      .filter({ visible: true })
+      .click();
     await components.getByRole('button', { name: /^CPU(?: 1)?$/ }).click();
     await expect(
       page.getByRole('dialog').getByRole('heading', { name: fresh.cpu[0].name, exact: true }),
@@ -401,6 +484,10 @@ try {
     ext.loseContext();
   });
   await expect(page.getByTestId('fallback-diagram')).toBeVisible();
+  await page
+    .getByRole('button', { name: 'Components', exact: true })
+    .filter({ visible: true })
+    .click();
   await components.getByRole('button', { name: /^CPU(?: 1)?$/ }).click();
   await expect(page.getByRole('dialog')).toBeVisible();
   await page.getByRole('button', { name: 'Close details' }).click();

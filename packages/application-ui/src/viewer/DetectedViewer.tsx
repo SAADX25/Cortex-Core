@@ -1,7 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { adapterClass, storagePlacement } from '@cortex/asset-runtime';
 import {
-  cpuIdentity,
   visualId,
   type MotionRequest,
   type CameraAction,
@@ -47,6 +46,18 @@ export default function DetectedViewer({ scan }: { scan: HardwareScan }) {
     setCamera((previous) => ({ action: 'fit', revision: previous.revision + 1 }));
   };
   const [camera, setCamera] = useState({ action: 'fit' as CameraAction, revision: 0 });
+  const [componentsOpen, setComponentsOpen] = useState(false);
+  const componentsDialog = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    if (!componentsOpen) return;
+    const previous = document.activeElement as HTMLElement | null;
+    const element = componentsDialog.current;
+    element?.showModal();
+    return () => {
+      element?.close();
+      previous?.focus();
+    };
+  }, [componentsOpen]);
   const [fullscreen, setFullscreen] = useState(false);
   const [fullscreenError, setFullscreenError] = useState('');
   const stage = useRef<HTMLDivElement>(null);
@@ -166,7 +177,8 @@ export default function DetectedViewer({ scan }: { scan: HardwareScan }) {
   }
   useEffect(() => {
     const escape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && fullscreen) void toggleFullscreen(false);
+      if (e.key === 'Escape' && fullscreen && !componentsOpen && !selected)
+        void toggleFullscreen(false);
     };
     const changed = () => {
       if (!isDesktop && !document.fullscreenElement) setFullscreen(false);
@@ -177,7 +189,7 @@ export default function DetectedViewer({ scan }: { scan: HardwareScan }) {
       window.removeEventListener('keydown', escape);
       document.removeEventListener('fullscreenchange', changed);
     };
-  }, [fullscreen]);
+  }, [fullscreen, componentsOpen, selected]);
   useEffect(
     () => () => {
       if (isDesktop) void setDesktopFullscreen(false).catch(() => undefined);
@@ -189,7 +201,7 @@ export default function DetectedViewer({ scan }: { scan: HardwareScan }) {
       <Icon name="chip" size={64} />
       <h2>Hardware overview</h2>
       <p className="muted">
-        3D graphics are unavailable. Select a detected component below to see its specifications.
+        3D graphics are unavailable. Open Components to inspect your detected specifications.
       </p>
     </div>
   );
@@ -224,69 +236,67 @@ export default function DetectedViewer({ scan }: { scan: HardwareScan }) {
       {motion.amount > 0 && <small>Illustrative separation · storage remains inventory</small>}
     </div>
   );
-  const componentRail = (
-    <nav className="detected-components" aria-label="Detected components">
-      {(['motherboard', 'cpu', 'gpu', 'memory', 'storage'] as const).map((category) => (
-        <section className="component-group" key={category}>
-          <h2>
-            {categoryNames[category]} <span>{scan[category].length || '—'}</span>
-          </h2>
-          {scan[category].length ? (
-            scan[category].map((device, index) => (
-              <button
-                className="component-entry"
-                key={`${category}-${index}`}
-                aria-label={`${categoryNames[category]}${scan[category].length > 1 ? ` ${index + 1}` : ''}`}
-                aria-describedby={`component-name-${category}-${index}`}
-                aria-pressed={
-                  visualSelection?.category === category &&
-                  (visualSelection.index === index ||
-                    (category === 'motherboard' && visualSelection.index === undefined))
-                }
-                onClick={() => selectDevice(category, index)}
-              >
-                <span className="component-entry-icon">
-                  <Icon
-                    name={
-                      category === 'cpu'
-                        ? 'chip'
-                        : category === 'motherboard'
-                          ? 'grid'
-                          : category === 'storage'
-                            ? 'box'
-                            : 'layers'
-                    }
-                    size={20}
-                  />
-                </span>
-                <span className="component-entry-copy">
-                  <strong id={`component-name-${category}-${index}`}>{device.name}</strong>
-                  <small>
-                    {category === 'gpu'
-                      ? adapterClass(device) === 'discrete'
-                        ? 'Discrete adapter'
-                        : `${adapterClass(device)} · system info`
-                      : category === 'storage'
-                        ? 'Detected inventory'
-                        : category === 'cpu'
-                          ? cpuIdentity(device.name, device.properties.Manufacturer).note.replace(
-                              ' visualization',
-                              '',
-                            )
-                          : category === 'motherboard'
-                            ? 'Generic motherboard'
-                            : `Module ${index + 1}`}
-                  </small>
-                </span>
-                <Icon name="chevron" size={14} />
-              </button>
-            ))
-          ) : (
-            <p className="component-empty">Not reported by system</p>
-          )}
-        </section>
-      ))}
-    </nav>
+  const componentsButton = (
+    <button
+      className="button secondary"
+      aria-haspopup="dialog"
+      aria-expanded={componentsOpen}
+      aria-controls={componentsOpen ? 'viewer-components' : undefined}
+      onClick={() => setComponentsOpen(true)}
+    >
+      <Icon name="layers" /> Components
+    </button>
+  );
+  const componentPicker = componentsOpen && (
+    <dialog
+      ref={componentsDialog}
+      id="viewer-components"
+      className="component-picker"
+      aria-label="Components"
+      onCancel={() => setComponentsOpen(false)}
+      onClick={(event) => {
+        if (event.target === componentsDialog.current) setComponentsOpen(false);
+      }}
+    >
+      <header>
+        <h2>Components</h2>
+        <button
+          className="icon-button"
+          aria-label="Close components"
+          onClick={() => setComponentsOpen(false)}
+        >
+          <Icon name="close" />
+        </button>
+      </header>
+      <nav aria-label="Detected components">
+        {(['motherboard', 'cpu', 'gpu', 'memory', 'storage'] as const).map((category) => (
+          <section key={category}>
+            <h3>{categoryNames[category]}</h3>
+            {scan[category].length ? (
+              scan[category].map((device, index) => (
+                <button
+                  key={`${category}-${index}`}
+                  aria-label={`${categoryNames[category]}${scan[category].length > 1 ? ` ${index + 1}` : ''}`}
+                  aria-describedby={`component-name-${category}-${index}`}
+                  aria-pressed={
+                    visualSelection?.category === category && (visualSelection.index ?? 0) === index
+                  }
+                  onClick={() => {
+                    setComponentsOpen(false);
+                    selectDevice(category, index);
+                  }}
+                >
+                  <span id={`component-name-${category}-${index}`}>{device.name}</span>
+                  <Icon name="chevron" size={14} />
+                </button>
+              ))
+            ) : (
+              <p className="muted">Not reported by system</p>
+            )}
+          </section>
+        ))}
+      </nav>
+    </dialog>
   );
   return (
     <main className="detected-viewer">
@@ -309,6 +319,7 @@ export default function DetectedViewer({ scan }: { scan: HardwareScan }) {
         </p>
       </details>
       <div className="detected-toolbar" hidden={fullscreen}>
+        {componentsButton}
         <button className="button secondary" onClick={() => command('reset')}>
           <Icon name="reset" />
           Reset camera
@@ -357,6 +368,7 @@ export default function DetectedViewer({ scan }: { scan: HardwareScan }) {
         {fullscreen && (
           <div className="fullscreen-motion">
             <div className="fullscreen-tools">
+              {componentsButton}
               <button onClick={() => command('fit')}>Fit to view</button>
               <button onClick={() => command('reset')}>Reset camera</button>
               <label>
@@ -374,7 +386,6 @@ export default function DetectedViewer({ scan }: { scan: HardwareScan }) {
               </label>
             </div>
             {motionControls}
-            {componentRail}
           </div>
         )}
         {fullscreen && (
@@ -443,6 +454,7 @@ export default function DetectedViewer({ scan }: { scan: HardwareScan }) {
             </div>
           )}
         </div>
+        {componentPicker}
         {selected && (
           <HardwareInspector
             scan={scan}
@@ -454,7 +466,6 @@ export default function DetectedViewer({ scan }: { scan: HardwareScan }) {
           />
         )}
       </div>
-      {!fullscreen && componentRail}
     </main>
   );
 }

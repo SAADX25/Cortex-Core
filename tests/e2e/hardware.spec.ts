@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { hardwareFixture } from '../hardware-fixture';
+import { motionProbeScript, idle, metrics, idleDraws } from '../motion-probe';
 async function mockScanner(page: Page, partial = false, scan = hardwareFixture) {
   await page.addInitScript(
     ({ scan, partial }) => {
@@ -99,6 +100,10 @@ test('generic viewer shows detected devices, details, quality and tears down on 
     page.getByTestId('canvas-stage').locator('canvas').or(page.getByTestId('fallback-diagram')),
   ).toBeVisible();
   await page
+    .getByRole('button', { name: 'Components', exact: true })
+    .filter({ visible: true })
+    .click();
+  await page
     .getByRole('navigation', { name: 'Detected components' })
     .getByRole('button', { name: 'GPU 2', exact: true })
     .click();
@@ -120,6 +125,10 @@ test('graphics fallback keeps actual hardware details usable', async ({ page }) 
   await mockScanner(page);
   await page.goto('/?graphics=off#/3d');
   await expect(page.getByTestId('fallback-diagram')).toBeVisible();
+  await page
+    .getByRole('button', { name: 'Components', exact: true })
+    .filter({ visible: true })
+    .click();
   await page
     .getByRole('navigation', { name: 'Detected components' })
     .getByRole('button', { name: 'CPU', exact: true })
@@ -187,6 +196,7 @@ test.describe('renderer performance protection', () => {
         cpuTemplate: `generic-${cpu.family}-desktop-cpu`,
       });
       const rail = page.getByRole('navigation', { name: 'Detected components' });
+      await page.getByRole('button', { name: 'Components', exact: true }).click();
       await expect(rail.getByRole('button', { name: 'CPU', exact: true })).toContainText(cpu.name);
       await rail.getByRole('button', { name: 'CPU', exact: true }).click();
       await expect(
@@ -305,4 +315,107 @@ test.describe('renderer performance protection', () => {
     await page.getByRole('link', { name: 'My PC', exact: true }).click();
     await expect(page.locator('canvas')).toHaveCount(0);
   });
+});
+
+test('compact Components chooser retains keyboard inspection without persistent cards', async ({
+  page,
+}) => {
+  await mockScanner(page);
+  await page.goto('/?graphics=off#/3d');
+  const trigger = page.getByRole('button', { name: 'Components', exact: true });
+  await expect(trigger).toBeVisible();
+  await expect(page.getByRole('navigation', { name: 'Detected components' })).toHaveCount(0);
+  await trigger.focus();
+  await page.keyboard.press('Enter');
+  const chooser = page.getByRole('dialog', { name: 'Components', exact: true });
+  await expect(chooser).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(chooser).toHaveCount(0);
+  await expect(trigger).toBeFocused();
+  for (const name of ['Motherboard', 'CPU', 'GPU 1', 'Memory 1', 'Storage 1']) {
+    await page.keyboard.press('Enter');
+    const item = page
+      .getByRole('navigation', { name: 'Detected components' })
+      .getByRole('button', { name, exact: true });
+    await item.focus();
+    await page.keyboard.press('Enter');
+    await expect(chooser).toHaveCount(0);
+    await expect(page.getByRole('dialog')).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(trigger).toBeFocused();
+  }
+});
+
+test('immersive 1080p layout selects every mesh and has no page overflow', async ({
+  page,
+  browserName,
+}, info) => {
+  test.skip(
+    browserName !== 'chromium' || info.project.name !== 'chromium',
+    'Desktop WebGL composition check',
+  );
+  await page.setViewportSize({ width: 1920, height: 1080 });
+  await mockScanner(page);
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  await page.addInitScript(motionProbeScript);
+  await page.goto('/?rendererMetrics=1#/3d');
+  await idle(page, 0);
+  const overflow = () =>
+    page.evaluate(() => ({
+      x: document.documentElement.scrollWidth > innerWidth,
+      y: document.documentElement.scrollHeight > innerHeight,
+    }));
+  expect(await overflow()).toEqual({ x: false, y: false });
+  await expect(page.getByRole('navigation', { name: 'Detected components' })).toHaveCount(0);
+  const canvas = page.locator('canvas');
+  const box = (await canvas.boundingBox())!;
+  expect(box.height).toBeGreaterThan(700);
+  for (const category of ['cpu', 'gpu', 'memory', 'storage'] as const) {
+    const visual = (await metrics(page)).hardwareVisuals.find((v) => v.category === category)!;
+    await page.mouse.click(
+      box.x + visual.projection[0]! * box.width,
+      box.y + visual.projection[1]! * box.height,
+    );
+    await expect(
+      page.getByRole('dialog').getByRole('heading', {
+        name: hardwareFixture[category][visual.index!]!.name,
+        exact: true,
+      }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Close details' }).click();
+    await page.getByRole('button', { name: 'Fit to view', exact: true }).click();
+    await idle(page, 0);
+  }
+  // Probe exposed PCB areas through real pointer events, since its bounds centre is covered by the GPU.
+  const board = (await metrics(page)).hardwareVisuals.find((v) => v.category === 'motherboard')!;
+  let boardPicked = false;
+  for (const [dx, dy] of [
+    [-0.12, -0.12],
+    [-0.16, 0.08],
+    [0.12, 0.12],
+    [0.16, -0.08],
+    [0, -0.18],
+  ]) {
+    await page.mouse.click(
+      box.x + (board.projection[0]! + dx!) * box.width,
+      box.y + (board.projection[1]! + dy!) * box.height,
+    );
+    const dialog = page.getByRole('dialog');
+    if (await dialog.count()) {
+      boardPicked =
+        (await dialog.getByRole('heading', { name: 'Motherboard', exact: true }).count()) > 0;
+      await page.getByRole('button', { name: 'Close details' }).click();
+      await page.getByRole('button', { name: 'Fit to view', exact: true }).click();
+      await idle(page, 0);
+      if (boardPicked) break;
+    }
+  }
+  expect(boardPicked).toBe(true);
+  await page.getByRole('button', { name: 'Exploded View', exact: true }).click();
+  await idle(page, 1);
+  expect(await overflow()).toEqual({ x: false, y: false });
+  await page.getByRole('button', { name: 'Reassemble', exact: true }).click();
+  await idle(page, 0);
+  await idleDraws(page);
+  await page.screenshot({ path: '.artifacts/motion/immersive-1080p.png' });
 });

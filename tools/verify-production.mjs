@@ -51,6 +51,10 @@ try {
     await page.getByRole('link', { name: 'View in 3D', exact: true }).click();
     await page.getByTestId('canvas-stage').locator('canvas').waitFor();
     await page
+      .getByRole('button', { name: 'Components', exact: true })
+      .filter({ visible: true })
+      .click();
+    await page
       .getByRole('navigation', { name: 'Detected components' })
       .getByRole('button', { name: 'CPU', exact: true })
       .click();
