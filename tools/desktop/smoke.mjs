@@ -5,6 +5,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import assert from 'node:assert/strict';
 import { chromium, expect } from '@playwright/test';
 import { parseHardwareScan } from '../../packages/application-ui/src/hardware.ts';
+import { cpuIdentity } from '../../packages/3d-engine/src/cpu-identity.ts';
 if (process.platform !== 'win32') throw new Error('This smoke runner targets Windows WebView2.');
 const development = process.argv.includes('--development');
 const output = resolve('.artifacts/desktop');
@@ -182,6 +183,16 @@ try {
     .poll(() => page.evaluate(() => globalThis.__cortexNativeMetrics?.hardwareVisuals?.length ?? 0))
     .toBeGreaterThan(0);
   const nativeMetrics = await page.evaluate(() => globalThis.__cortexNativeMetrics);
+  for (const [index, cpu] of fresh.cpu.entries()) {
+    const visual = nativeMetrics.hardwareVisuals.find(
+      (v) => v.category === 'cpu' && v.index === index,
+    );
+    const identity = cpuIdentity(cpu.name, cpu.properties.Manufacturer);
+    assert.equal(visual.cpuLabel, cpu.name);
+    assert.equal(visual.cpuFamily, identity.family);
+    assert.equal(visual.cpuTemplate, identity.template);
+  }
+  check('CPU surface marking matches the native scan and uses a generic family template');
   assert.equal(
     nativeMetrics.hardwareVisuals.filter((v) => v.category === 'gpu').length,
     fresh.gpu.filter((g) => g.properties['Adapter class'] === 'Discrete').length,
@@ -251,6 +262,13 @@ try {
   await expect(
     page.getByRole('dialog').getByRole('heading', { name: fresh.cpu[0].name, exact: true }),
   ).toBeVisible();
+  await expect(
+    page
+      .getByRole('dialog')
+      .getByText(cpuIdentity(fresh.cpu[0].name, fresh.cpu[0].properties.Manufacturer).note, {
+        exact: true,
+      }),
+  ).toBeVisible();
   await page.getByRole('button', { name: 'Close details' }).click();
   check('Detected read-only 3D visualization, explicit generic label and actual inspector');
   await page.getByLabel('Rendering quality').selectOption('low');
@@ -299,13 +317,48 @@ try {
   await expect.poll(async () => (await invoke('desktop_status')).fullscreen).toBe(false);
   await expect(page.getByTestId('canvas-stage')).not.toHaveClass(/viewer-fullscreen/);
   check('Native fullscreen and Escape restore');
+  await page.getByLabel('Rendering quality').selectOption('low');
+  // Compare the same selection state; its outline owns one extra geometry.
+  await components.getByRole('button', { name: /^CPU(?: 1)?$/ }).click();
+  await page.getByRole('button', { name: 'Close details' }).click();
+  await delay(700);
+  const resources = await page.evaluate(() => ({
+    geometries: globalThis.__cortexNativeMetrics.geometries,
+    textures: globalThis.__cortexNativeMetrics.textures,
+  }));
   for (let i = 0; i < 4; i++) {
+    await canvas.evaluate((element) => {
+      globalThis.__previousContext = element.getContext('webgl2');
+    });
     await page.getByRole('link', { name: 'My PC', exact: true }).click();
     await expect(canvas).toHaveCount(0);
+    await expect
+      .poll(() => page.evaluate(() => globalThis.__previousContext.isContextLost()))
+      .toBe(true);
+    await page.evaluate(() => {
+      globalThis.__cortexNativeMetrics = undefined;
+    });
     await page.getByRole('link', { name: 'View in 3D', exact: true }).click();
     await expect(canvas).toBeVisible();
+    await page.getByLabel('Rendering quality').selectOption('low');
+    await components.getByRole('button', { name: /^CPU(?: 1)?$/ }).click();
+    await expect(
+      page.getByRole('dialog').getByRole('heading', { name: fresh.cpu[0].name, exact: true }),
+    ).toBeVisible();
+    await page.getByRole('button', { name: 'Close details' }).click();
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () =>
+            globalThis.__cortexNativeMetrics?.quality === 'low' && {
+              geometries: globalThis.__cortexNativeMetrics.geometries,
+              textures: globalThis.__cortexNativeMetrics.textures,
+            },
+        ),
+      )
+      .toEqual(resources);
   }
-  check('Four viewer entry/exit cycles and canvas cleanup');
+  check('Four viewer cycles release contexts and retain bounded geometry/texture counts');
   await delay(700);
   await canvas.evaluate((element) => {
     const ext = element.getContext('webgl2')?.getExtension('WEBGL_lose_context');

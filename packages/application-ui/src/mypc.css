@@ -280,7 +280,31 @@
   font-size: 13px;
   line-height: 1.7;
   max-width: 900px;
+  margin-bottom: 8px;
+}
+.viewer-info {
+  position: relative;
   margin-bottom: 20px;
+  max-width: 760px;
+}
+.viewer-info summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  width: fit-content;
+  color: var(--accent);
+  cursor: pointer;
+  font-size: 12px;
+}
+.viewer-info p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.7;
+  padding: 14px 18px;
+  margin-top: 10px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--raised);
 }
 .detected-toolbar {
   display: flex;
@@ -295,33 +319,181 @@
   border-radius: 7px;
   background: var(--raised);
 }
+.detected-toolbar .button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  padding: 9px 12px;
+}
+.detected-toolbar label {
+  margin-left: auto;
+  color: var(--muted);
+  font-size: 12px;
+}
 .detected-stage {
-  height: min(62vh, 700px);
+  height: min(64vh, 720px);
   min-height: 360px;
   position: relative;
   border-radius: 14px;
   overflow: hidden;
   background: var(--canvas);
+  border: 1px solid #ffffff10;
 }
 .detected-stage canvas {
   display: block;
 }
 .detected-components {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 0;
+  margin-top: 14px;
+  border: 1px solid #ffffff12;
+  border-radius: 14px;
+  overflow: hidden;
+  background: linear-gradient(135deg, #1c2628, #151d1f);
+}
+.component-group {
+  min-width: 0;
+  padding: 16px 10px 10px;
+  border-right: 1px solid #ffffff0c;
+}
+.component-group:last-child {
+  border-right: 0;
+}
+.component-group h2 {
   display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 18px;
-}
-.detected-components .button {
-  text-align: left;
-  max-width: 100%;
-}
-.detected-components small {
-  display: block;
-  color: var(--muted);
+  justify-content: space-between;
+  margin: 0 8px 12px;
   font-size: 11px;
-  margin-top: 5px;
+  font-weight: 600;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: #b4c1ba;
+}
+.component-group h2 span {
+  color: #788b82;
+}
+.component-entry {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 9px;
+  padding: 12px 8px;
+  margin-top: 4px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  cursor: pointer;
+}
+.component-entry:hover {
+  background: #ffffff06;
+  border-color: #ffffff12;
+}
+.component-entry[aria-pressed='true'] {
+  background: #baf36c0b;
+  border-color: #baf36c40;
+}
+.component-entry:focus-visible,
+.viewer-info summary:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.component-entry-icon {
+  color: #8da38f;
+  display: flex;
+  flex-shrink: 0;
+}
+.component-entry-copy {
+  flex: 1;
+  min-width: 0;
+}
+.component-entry strong {
+  display: block;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.5;
   overflow-wrap: anywhere;
+}
+.component-entry small {
+  display: block;
+  font-size: 10px;
+  color: #91a29a;
+  margin-top: 4px;
+  line-height: 1.4;
+}
+.component-entry > svg {
+  flex-shrink: 0;
+  color: #75867d;
+}
+.component-empty {
+  font-size: 12px;
+  padding: 12px 8px;
+  color: var(--muted);
+}
+.viewer-inspector {
+  background: linear-gradient(155deg, #202e30, #131b1e 65%);
+  border-left: 1px solid #baf36c25;
+}
+.viewer-inspector .device-details h3 {
+  font-size: 26px;
+  line-height: 1.3;
+  overflow-wrap: anywhere;
+  margin-bottom: 20px;
+}
+.inspector-visual-note {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 16px;
+  margin-bottom: 18px;
+  border: 1px solid #baf36c20;
+  background: #baf36c07;
+  border-radius: 12px;
+  color: #bfcea9;
+}
+.inspector-visual-note > svg {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.inspector-visual-note strong {
+  font-size: 13px;
+  font-weight: 500;
+}
+.inspector-visual-note small {
+  display: block;
+  color: #99aaa1;
+  font-size: 12px;
+  line-height: 1.6;
+  margin-top: 6px;
+}
+@media (max-width: 1100px) {
+  .detected-components {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+@media (max-width: 650px) {
+  .detected-components {
+    grid-template-columns: 1fr;
+  }
+  .component-group {
+    border-right: 0;
+    border-bottom: 1px solid #ffffff0c;
+  }
+  .component-group:last-child {
+    border-bottom: 0;
+  }
+  .detected-toolbar label {
+    margin-left: 0;
+  }
+  .detected-stage {
+    height: 52vh;
+  }
+  .viewer-inspector {
+    padding: 24px;
+  }
 }
 .board-caption {
   position: absolute;

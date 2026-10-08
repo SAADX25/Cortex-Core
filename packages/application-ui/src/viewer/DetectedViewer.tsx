@@ -1,6 +1,12 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { adapterClass, storagePlacement } from '@cortex/asset-runtime';
-import type { CameraAction, ComponentId, QualityMode, DetectedScene } from '@cortex/3d-engine';
+import {
+  cpuIdentity,
+  type CameraAction,
+  type ComponentId,
+  type QualityMode,
+  type DetectedScene,
+} from '@cortex/3d-engine';
 import type { HardwareCategory, HardwareScan } from '../hardware';
 import { categoryNames } from '../hardware';
 import HardwareInspector from '../HardwareInspector';
@@ -58,6 +64,7 @@ export default function DetectedViewer({ scan }: { scan: HardwareScan }) {
                 category,
                 index,
                 name: device.name,
+                manufacturer: device.properties.Manufacturer,
                 ...(category === 'storage' ? { placement: storagePlacement(device) } : {}),
               },
             ],
@@ -118,16 +125,25 @@ export default function DetectedViewer({ scan }: { scan: HardwareScan }) {
       </h1>
       <p className="visual-note">
         Generic visualization — specifications are from your detected hardware.
-        <br />
-        Generic motherboard visualization · OEM / unknown layout. Socket, form factor and slot
-        occupancy are illustrative. Only system-confirmed discrete adapters appear as cards. Storage
-        inventory does not imply a physical location.
       </p>
+      <details className="viewer-info">
+        <summary>
+          <Icon name="info" size={16} /> About this visualization
+        </summary>
+        <p>
+          Brand-aware generic shapes, with names and specifications from your scan. These are
+          illustrative assets, not verified exact physical models. Motherboard layout, socket, form
+          factor and slot occupancy are illustrative. Only system-confirmed discrete adapters appear
+          as cards. Storage inventory does not imply a physical location.
+        </p>
+      </details>
       <div className="detected-toolbar">
         <button className="button secondary" onClick={() => command('reset')}>
+          <Icon name="reset" />
           Reset camera
         </button>
         <button className="button secondary" onClick={() => command('fit')}>
+          <Icon name="focus" />
           Fit to view
         </button>
         <button className="button secondary" onClick={() => command('zoom-in')}>
@@ -155,6 +171,7 @@ export default function DetectedViewer({ scan }: { scan: HardwareScan }) {
           </select>
         </label>
         <button className="button secondary" onClick={() => void toggleFullscreen(true)}>
+          <Icon name="expand" />
           Fullscreen viewer
         </button>
         {fullscreenError && <span role="status">{fullscreenError}</span>}
@@ -231,35 +248,73 @@ export default function DetectedViewer({ scan }: { scan: HardwareScan }) {
         )}
       </div>
       <nav className="detected-components" aria-label="Detected components">
-        <button className="button secondary" onClick={() => selectDevice('motherboard')}>
-          Motherboard
-        </button>
-        {(['cpu', 'gpu', 'memory', 'storage'] as const).flatMap((category) =>
-          scan[category].map((device, index) => (
-            <button
-              className="button secondary"
-              key={`${category}-${index}`}
-              aria-label={`${categoryNames[category]}${scan[category].length > 1 ? ` ${index + 1}` : ''}`}
-              onClick={() => selectDevice(category, index)}
-            >
-              {categoryNames[category]}
-              {scan[category].length > 1 ? ` ${index + 1}` : ''}
-              <small>
-                {category === 'gpu'
-                  ? `${adapterClass(device) === 'discrete' ? 'Generic discrete GPU' : `${adapterClass(device)} · system information`} — ${device.name}`
-                  : category === 'storage'
-                    ? `${device.name} · inventory, location unknown`
-                    : `${device.name} · generic shape`}
-              </small>
-            </button>
-          )),
-        )}
+        {(['motherboard', 'cpu', 'gpu', 'memory', 'storage'] as const).map((category) => (
+          <section className="component-group" key={category}>
+            <h2>
+              {categoryNames[category]} <span>{scan[category].length || '—'}</span>
+            </h2>
+            {scan[category].length ? (
+              scan[category].map((device, index) => (
+                <button
+                  className="component-entry"
+                  key={`${category}-${index}`}
+                  aria-label={`${categoryNames[category]}${scan[category].length > 1 ? ` ${index + 1}` : ''}`}
+                  aria-describedby={`component-name-${category}-${index}`}
+                  aria-pressed={
+                    visualSelection?.category === category &&
+                    (visualSelection.index === index ||
+                      (category === 'motherboard' && visualSelection.index === undefined))
+                  }
+                  onClick={() => selectDevice(category, index)}
+                >
+                  <span className="component-entry-icon">
+                    <Icon
+                      name={
+                        category === 'cpu'
+                          ? 'chip'
+                          : category === 'motherboard'
+                            ? 'grid'
+                            : category === 'storage'
+                              ? 'box'
+                              : 'layers'
+                      }
+                      size={20}
+                    />
+                  </span>
+                  <span className="component-entry-copy">
+                    <strong id={`component-name-${category}-${index}`}>{device.name}</strong>
+                    <small>
+                      {category === 'gpu'
+                        ? adapterClass(device) === 'discrete'
+                          ? 'Discrete adapter'
+                          : `${adapterClass(device)} · system info`
+                        : category === 'storage'
+                          ? 'Detected inventory'
+                          : category === 'cpu'
+                            ? cpuIdentity(device.name, device.properties.Manufacturer).note.replace(
+                                ' visualization',
+                                '',
+                              )
+                            : category === 'motherboard'
+                              ? 'Generic motherboard'
+                              : `Module ${index + 1}`}
+                    </small>
+                  </span>
+                  <Icon name="chevron" size={14} />
+                </button>
+              ))
+            ) : (
+              <p className="component-empty">Not reported by system</p>
+            )}
+          </section>
+        ))}
       </nav>
       {selected && (
         <HardwareInspector
           scan={scan}
           category={selected}
           deviceIndex={deviceIndex}
+          visualization
           close={() => setSelected(null)}
         />
       )}

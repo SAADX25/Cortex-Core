@@ -46,7 +46,15 @@ export interface SceneMetrics {
   estimatedGpuBytes: number;
   viewport: { width: number; height: number; samples: number };
   pbrPalette: string[];
-  hardwareVisuals: { category: string; index?: number; assetId: string; projection: number[] }[];
+  hardwareVisuals: {
+    category: string;
+    index?: number;
+    assetId: string;
+    projection: number[];
+    cpuFamily?: string;
+    cpuLabel?: string;
+    cpuTemplate?: string;
+  }[];
   installedVisuals: {
     slotId: string;
     partId: string;
@@ -396,7 +404,7 @@ function Scene({
           target = bounds.getCenter(new Vector3());
           // Fit the projected corners, including cards and the inventory tray.
           // A single max-dimension heuristic leaves excessive empty space on wide canvases.
-          const direction = new Vector3(0.38, 0.68, 0.48).normalize();
+          const direction = new Vector3(0.28, 0.82, 0.42).normalize();
           const right = new Vector3().crossVectors(new Vector3(0, 1, 0), direction).normalize();
           const up = new Vector3().crossVectors(direction, right).normalize();
           const perspective = camera as PerspectiveCamera;
@@ -420,7 +428,7 @@ function Scene({
                     Math.abs(point.dot(up)) / vertical + point.dot(direction),
                   );
                 }
-          position = target.clone().addScaledVector(direction, distance * 1.08);
+          position = target.clone().addScaledVector(direction, distance * 1.045);
         }
       }
     }
@@ -504,6 +512,13 @@ function Scene({
             category: object.userData.detectedCategory,
             index: object.userData.detectedIndex,
             assetId: object.userData.assetId,
+            ...(object.userData.cpuFamily
+              ? {
+                  cpuFamily: object.userData.cpuFamily,
+                  cpuLabel: object.userData.cpuLabel,
+                  cpuTemplate: object.userData.cpuTemplate,
+                }
+              : {}),
             projection: [(center.x + 1) / 2, (1 - center.y) / 2],
           });
         }

@@ -21,10 +21,13 @@ import {
 } from './detected-models';
 import type { QualityLevel } from './quality';
 import type { Vector3Tuple } from './semantics';
+import { cpuIdentity } from './cpu-identity';
+import { createCpuMarking } from './cpu-marking';
 export interface DetectedVisual {
   category: 'cpu' | 'gpu' | 'memory' | 'storage';
   index: number;
   name: string;
+  manufacturer?: string;
   placement?: 'm2' | 'inventory';
 }
 export interface DetectedScene {
@@ -128,11 +131,17 @@ function Device({
   detail: number;
   position: Vector3Tuple;
 }) {
-  const { category, placement } = device;
+  const { category, placement, name, manufacturer } = device;
   const model = useMemo(
-    () => deviceModel({ category, placement }, detail),
-    [category, placement, detail],
+    () => deviceModel({ category, placement, name, manufacturer }, detail),
+    [category, placement, name, manufacturer, detail],
   );
+  const marking = useMemo(
+    () => (category === 'cpu' ? createCpuMarking(name, manufacturer) : null),
+    [category, name, manufacturer],
+  );
+  useEffect(() => () => marking?.dispose(), [marking]);
+  const identity = category === 'cpu' ? cpuIdentity(name, manufacturer) : null;
   const selected =
     scene.selected?.category === device.category && scene.selected.index === device.index;
   return (
@@ -142,6 +151,13 @@ function Device({
         detectedCategory: device.category,
         detectedIndex: device.index,
         assetId: resolveDetectedVisual(device.category).assetId,
+        ...(identity
+          ? {
+              cpuFamily: identity.family,
+              cpuLabel: marking?.userData.cpuLabel,
+              cpuTemplate: identity.template,
+            }
+          : {}),
       }}
       onClick={(event: ThreeEvent<PointerEvent>) => {
         event.stopPropagation();
@@ -149,6 +165,20 @@ function Device({
       }}
     >
       <ModelMeshes model={model} materials={materials} />
+      {marking && (
+        <mesh position={[0, 3.43, 0]} rotation={[-Math.PI / 2, 0, 0]} raycast={() => null}>
+          <planeGeometry args={[26, 26]} />
+          <meshStandardMaterial
+            map={marking}
+            transparent
+            roughness={0.72}
+            metalness={0.15}
+            depthWrite={false}
+            polygonOffset
+            polygonOffsetFactor={-1}
+          />
+        </mesh>
+      )}
       {selected && <Selection bounds={model.bounds} />}
     </group>
   );

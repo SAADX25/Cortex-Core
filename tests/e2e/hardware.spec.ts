@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { hardwareFixture } from '../hardware-fixture';
-async function mockScanner(page: Page, partial = false) {
+async function mockScanner(page: Page, partial = false, scan = hardwareFixture) {
   await page.addInitScript(
     ({ scan, partial }) => {
       Object.defineProperty(window, 'isTauri', { value: true });
@@ -21,7 +21,7 @@ async function mockScanner(page: Page, partial = false) {
         },
       });
     },
-    { scan: hardwareFixture, partial },
+    { scan, partial },
   );
 }
 test('automatic scan, six cards, only three routes, real details and rescan', async ({ page }) => {
@@ -141,6 +141,134 @@ test.describe('renderer performance protection', () => {
       browserName !== 'chromium',
       'The draw-call probe targets Chromium WebGL; fallback is checked on every browser.',
     );
+  });
+  for (const cpu of [
+    { name: 'Intel Core i7-8700', manufacturer: 'GenuineIntel', family: 'intel' },
+    { name: 'AMD Ryzen 7 7800X3D', manufacturer: 'AuthenticAMD', family: 'amd' },
+  ]) {
+    test(`${cpu.family} CPU has the detected top marking and generic template`, async ({
+      page,
+    }) => {
+      await mockScanner(page, false, {
+        ...hardwareFixture,
+        cpu: [
+          {
+            ...hardwareFixture.cpu[0]!,
+            name: cpu.name,
+            properties: { ...hardwareFixture.cpu[0]!.properties, Manufacturer: cpu.manufacturer },
+          },
+        ],
+      });
+      await page.addInitScript(() =>
+        window.addEventListener('cortex-render-metrics', (event) => {
+          (window as unknown as { __metrics: unknown }).__metrics = (event as CustomEvent).detail;
+        }),
+      );
+      await page.goto('/?rendererMetrics=1#/3d');
+      const cpuVisual = () =>
+        page.evaluate(() =>
+          (
+            window as unknown as {
+              __metrics?: {
+                hardwareVisuals: {
+                  category: string;
+                  cpuLabel?: string;
+                  cpuFamily?: string;
+                  cpuTemplate?: string;
+                  projection: number[];
+                }[];
+              };
+            }
+          ).__metrics?.hardwareVisuals.find((v) => v.category === 'cpu'),
+        );
+      await expect.poll(cpuVisual).toMatchObject({
+        cpuLabel: cpu.name,
+        cpuFamily: cpu.family,
+        cpuTemplate: `generic-${cpu.family}-desktop-cpu`,
+      });
+      const rail = page.getByRole('navigation', { name: 'Detected components' });
+      await expect(rail.getByRole('button', { name: 'CPU', exact: true })).toContainText(cpu.name);
+      await rail.getByRole('button', { name: 'CPU', exact: true }).click();
+      await expect(
+        page.getByRole('dialog').getByRole('heading', { name: cpu.name, exact: true }),
+      ).toBeVisible();
+      await expect(
+        page
+          .getByRole('dialog')
+          .getByText(`Generic ${cpu.family === 'intel' ? 'Intel' : 'AMD'} CPU visualization`, {
+            exact: true,
+          }),
+      ).toBeVisible();
+      await page.getByRole('button', { name: 'Close details' }).click();
+      await page.locator('canvas').scrollIntoViewIfNeeded();
+      const visual = await cpuVisual();
+      const bounds = await page.locator('canvas').boundingBox();
+      expect(bounds).not.toBeNull();
+      await page.mouse.click(
+        bounds!.x + visual!.projection[0]! * bounds!.width,
+        bounds!.y + visual!.projection[1]! * bounds!.height,
+      );
+      await expect(
+        page.getByRole('dialog').getByRole('heading', { name: cpu.name, exact: true }),
+      ).toBeVisible();
+    });
+  }
+  test('repeated opens release WebGL contexts and retain bounded GPU resources', async ({
+    page,
+  }) => {
+    await mockScanner(page, false, {
+      ...hardwareFixture,
+      cpu: [{ ...hardwareFixture.cpu[0]!, name: 'AMD Ryzen 7 7800X3D' }],
+    });
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.addInitScript(() =>
+      window.addEventListener('cortex-render-metrics', (event) => {
+        (window as unknown as { __metrics: unknown }).__metrics = (event as CustomEvent).detail;
+      }),
+    );
+    await page.goto('/?rendererMetrics=1#/3d');
+    const counts = () =>
+      page.evaluate(() => {
+        const metrics = (
+          window as unknown as {
+            __metrics?: { geometries: number; textures: number; quality: string };
+          }
+        ).__metrics;
+        return (
+          metrics?.quality === 'low' && {
+            geometries: metrics.geometries,
+            textures: metrics.textures,
+          }
+        );
+      });
+    await page.getByLabel('Rendering quality').selectOption('low');
+    await expect.poll(counts).toBeTruthy();
+    await page.waitForTimeout(1000);
+    const baseline = await counts();
+    for (let cycle = 0; cycle < 4; cycle++) {
+      await page.locator('canvas').evaluate((canvas) => {
+        (
+          window as unknown as { __previousContext: WebGL2RenderingContext | null }
+        ).__previousContext = (canvas as HTMLCanvasElement).getContext('webgl2');
+      });
+      await page.getByRole('link', { name: 'My PC', exact: true }).click();
+      await expect(page.locator('canvas')).toHaveCount(0);
+      await expect
+        .poll(() =>
+          page.evaluate(() =>
+            (
+              window as unknown as { __previousContext: WebGL2RenderingContext }
+            ).__previousContext.isContextLost(),
+          ),
+        )
+        .toBe(true);
+      await page.evaluate(() => {
+        (window as unknown as { __metrics: unknown }).__metrics = undefined;
+      });
+      await page.getByRole('link', { name: 'View in 3D', exact: true }).click();
+      await page.getByLabel('Rendering quality').selectOption('low');
+      await expect.poll(counts).toEqual(baseline);
+    }
   });
   test('demand rendering returns to idle after camera interaction', async ({ page }) => {
     await page.addInitScript(() => {

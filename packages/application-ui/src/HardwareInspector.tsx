@@ -1,16 +1,20 @@
 import { useEffect, useRef } from 'react';
 import { bytes, categoryNames, type HardwareCategory, type HardwareScan } from './hardware';
 import { Icon } from './icons';
+import { cpuIdentity } from '@cortex/3d-engine';
+import { adapterClass } from '@cortex/asset-runtime';
 export default function HardwareInspector({
   scan,
   category,
   deviceIndex,
   close,
+  visualization = false,
 }: {
   scan: HardwareScan;
   category: HardwareCategory;
   deviceIndex?: number;
   close(): void;
+  visualization?: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
@@ -27,7 +31,7 @@ export default function HardwareInspector({
   return (
     <dialog
       ref={dialog}
-      className="hardware-inspector"
+      className={`hardware-inspector${visualization ? ' viewer-inspector' : ''}`}
       aria-labelledby="inspector-title"
       onCancel={close}
       onClick={(e) => {
@@ -36,7 +40,9 @@ export default function HardwareInspector({
     >
       <div className="inspector-heading">
         <div>
-          <div className="eyebrow">DETECTED SPECIFICATIONS</div>
+          <div className="eyebrow">
+            {visualization ? 'COMPONENT INSPECTOR' : 'DETECTED SPECIFICATIONS'}
+          </div>
           <h2 id="inspector-title">{categoryNames[category]}</h2>
         </div>
         <button className="icon-button" aria-label="Close details" onClick={close}>
@@ -51,7 +57,32 @@ export default function HardwareInspector({
         devices.map((d, i) => (
           <section key={i} className="device-details">
             <h3>{d.name === 'Unknown' ? `${categoryNames[category]} ${i + 1}` : d.name}</h3>
+            {visualization && (
+              <div className="inspector-visual-note">
+                <Icon name="info" size={18} />
+                <div>
+                  <strong>
+                    {category === 'cpu'
+                      ? cpuIdentity(d.name, d.properties.Manufacturer).note
+                      : category === 'gpu' && adapterClass(d) !== 'discrete'
+                        ? 'System information · no discrete card visual'
+                        : `Generic ${category === 'gpu' ? 'GPU' : category} visualization`}
+                  </strong>
+                  <small>
+                    {category === 'storage'
+                      ? 'Inventory only · physical location and form factor are unknown.'
+                      : 'Illustrative shape · exact physical model is not verified.'}
+                  </small>
+                </div>
+              </div>
+            )}
             <dl className="spec-list">
+              {visualization && !d.properties.Manufacturer && !d.properties.Vendor && (
+                <div>
+                  <dt>Manufacturer</dt>
+                  <dd>Not reported by system</dd>
+                </div>
+              )}
               {Object.entries(d.properties).map(([key, val]) => (
                 <div key={key}>
                   <dt>{key.replace(' (bytes)', '')}</dt>

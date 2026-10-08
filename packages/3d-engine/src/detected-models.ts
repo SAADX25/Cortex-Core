@@ -17,6 +17,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { boardFamilies, type BoardFamily } from '@cortex/asset-runtime';
 import type { Vector3Tuple as V } from './semantics';
 import type { DetectedVisual } from './DetectedComponents';
+import { cpuIdentity } from './cpu-identity';
 export const finishes = {
   pcb: ['#091b14', 0.86, 0.04],
   substrate: ['#173f2a', 0.8, 0.04],
@@ -404,17 +405,27 @@ export function boardModel(family: BoardFamily, detail: number): Model {
   return b.finish();
 }
 export function deviceModel(
-  device: Pick<DetectedVisual, 'category' | 'placement'>,
+  device: Pick<DetectedVisual, 'category' | 'placement'> &
+    Partial<Pick<DetectedVisual, 'name' | 'manufacturer'>>,
   detail: number,
 ): Model {
   const b = new Builder();
   if (device.category === 'cpu') {
+    const family = cpuIdentity(device.name ?? '', device.manufacturer).family;
     b.box([40, 1.3, 40], [0, 0, 0], 'substrate', 0.35);
     b.box([35, 1.8, 35], [0, 1.5, 0], 'metal', 0.9);
-    b.box([31, 1.2, 31], [0, 2.8, 0], 'metal', 0.6);
-    for (let i = 0; i < 4; i++)
-      b.box([13 - i * 2, 0.035, 0.35], [-3, 3.42, -5 + i * 2], 'aluminum', 0);
-    b.text('GENERIC CPU', [-12, 3.44, 5], 0.58, 'aluminum');
+    if (family === 'amd') {
+      // Ryzen-inspired scalloped heat spreader; illustrative, with no socket claim.
+      b.box([27, 1.2, 35], [0, 2.8, 0], 'metal', 0.6);
+      b.box([35, 1.2, 23], [0, 2.8, 0], 'metal', 0.6);
+      for (const x of [-16, 16])
+        for (const z of [-15.5, 15.5]) b.box([3, 1.2, 4], [x, 2.8, z], 'metal', 0.35);
+    } else {
+      // Intel-inspired continuous cap; unknown vendors retain the neutral template.
+      b.box([31, 1.2, 31], [0, 2.8, 0], 'metal', 0.6);
+      if (family === 'intel')
+        for (const x of [-19, 19]) b.box([1.2, 0.8, 4], [x, 0.7, 0], 'gold', 0.15);
+    }
     b.repeated(
       [1, 0.35, 1],
       Array.from({ length: 20 }, (_, i) => [((i % 10) - 4.5) * 3.2, 0.9, i < 10 ? -18 : 18]),
