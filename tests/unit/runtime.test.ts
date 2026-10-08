@@ -18,7 +18,7 @@ import { useViewerStore } from '../../packages/application-ui/src/viewer/store';
 
 describe('asset manifests and templates', () => {
   it('validates all original templates', () =>
-    expect(assetManifestSchema.parse(originalManifest)).toHaveLength(5));
+    expect(assetManifestSchema.parse(originalManifest)).toHaveLength(13));
   it('rejects unclear permissions', () =>
     expect(
       assetManifestSchema.safeParse([{ ...originalManifest[0], allowedUse: ['modification'] }])
@@ -99,6 +99,16 @@ describe('adaptive quality and generic LOD', () => {
     const manager = new AdaptiveQualityManager();
     feed(manager, 2000, 1000);
     expect(manager.level).toBe('medium');
+  });
+  it('downshifts sustained slow active rendering while ignoring equally long idle pauses', () => {
+    const active = new AdaptiveQualityManager(),
+      idle = new AdaptiveQualityManager();
+    for (let i = 0; i < 90; i++) {
+      active.sample(250, 20000 + i * 250, true);
+      idle.sample(250, 20000 + i * 250);
+    }
+    expect(active.level).toBe('low');
+    expect(idle.level).toBe('medium');
   });
   it('requires four good windows before increasing quality', () => {
     const manager = new AdaptiveQualityManager();

@@ -22,6 +22,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "verify:production": "node tools/verify-production.mjs",
+    "verify:3d": "node tools/verify-reconstruction.mjs",
     "desktop:dev": "pnpm --filter @cortex/desktop dev",
     "desktop:build": "pnpm --filter @cortex/desktop build",
     "desktop:check": "pnpm --filter @cortex/desktop check:rust",

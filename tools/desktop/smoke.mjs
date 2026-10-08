@@ -169,9 +169,77 @@ try {
   await page.reload();
   await expect(page.getByRole('button', { name: 'CPU details', exact: true })).toBeVisible();
   check('Offline rescan and cached scan restore after webview reload');
+  await page.evaluate(() => {
+    globalThis.history.replaceState(null, '', '?rendererMetrics=1' + globalThis.location.hash);
+    globalThis.addEventListener('cortex-render-metrics', (e) => {
+      globalThis.__cortexNativeMetrics = e.detail;
+    });
+  });
   await page.getByRole('link', { name: 'View in 3D', exact: true }).click();
   const canvas = page.getByTestId('canvas-stage').locator('canvas');
   await expect(canvas).toBeVisible();
+  await expect
+    .poll(() => page.evaluate(() => globalThis.__cortexNativeMetrics?.hardwareVisuals?.length ?? 0))
+    .toBeGreaterThan(0);
+  const nativeMetrics = await page.evaluate(() => globalThis.__cortexNativeMetrics);
+  assert.equal(
+    nativeMetrics.hardwareVisuals.filter((v) => v.category === 'gpu').length,
+    fresh.gpu.filter((g) => g.properties['Adapter class'] === 'Discrete').length,
+  );
+  assert.equal(
+    nativeMetrics.hardwareVisuals.filter((v) => v.category === 'memory').length,
+    fresh.memory.length,
+  );
+  assert.equal(
+    nativeMetrics.hardwareVisuals.filter((v) => v.category === 'storage').length,
+    fresh.storage.length,
+  );
+  check('System-confirmed discrete cards only; exact detected memory and physical disk counts');
+  const nativeProfiles = [];
+  for (const level of ['low', 'medium', 'high']) {
+    await page.getByLabel('Rendering quality').selectOption(level);
+    await page.getByRole('button', { name: 'Fit to view', exact: true }).click();
+    await expect
+      .poll(() => page.evaluate(() => globalThis.__cortexNativeMetrics?.quality))
+      .toBe(level);
+    await delay(500);
+    const box = await canvas.boundingBox();
+    await page.evaluate(() => {
+      globalThis.__nativeFrames = [];
+      globalThis.__captureNativeFrames = true;
+      let last = 0;
+      const sample = (now) => {
+        if (!globalThis.__captureNativeFrames) return;
+        if (last) globalThis.__nativeFrames.push(now - last);
+        last = now;
+        globalThis.requestAnimationFrame(sample);
+      };
+      globalThis.requestAnimationFrame(sample);
+    });
+    await page.mouse.move(box.x + box.width * 0.48, box.y + box.height * 0.48);
+    await page.mouse.down();
+    await page.mouse.move(box.x + box.width * 0.62, box.y + box.height * 0.58, { steps: 32 });
+    await page.mouse.up();
+    await delay(700);
+    const performance = await page.evaluate(() => {
+      globalThis.__captureNativeFrames = false;
+      const frames = globalThis.__nativeFrames.sort((a, b) => a - b);
+      return {
+        samples: frames.length,
+        frameP50: frames[Math.floor(frames.length * 0.5)],
+        frameP95: frames[Math.floor(frames.length * 0.95)],
+      };
+    });
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Fit to view', exact: true }).click();
+    await delay(500);
+    nativeProfiles.push({
+      ...(await page.evaluate(() => globalThis.__cortexNativeMetrics)),
+      interaction: performance,
+    });
+  }
+  await page.getByLabel('Rendering quality').selectOption('auto');
+  check('Packaged Low / Standard / High scene metrics and interaction frame intervals');
   await expect(
     page.getByText('Generic visualization — specifications are from your detected hardware.'),
   ).toBeVisible();
@@ -190,6 +258,7 @@ try {
   await page.getByRole('button', { name: 'Reset camera', exact: true }).click();
   await delay(700);
   const before = await canvas.screenshot();
+  const fittedCamera = (await page.evaluate(() => globalThis.__cortexNativeMetrics)).camera;
   await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
   await delay(700);
   assert(!before.equals(await canvas.screenshot()));
@@ -206,6 +275,17 @@ try {
   assert(!zoomed.equals(await canvas.screenshot()));
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await page.getByRole('button', { name: 'Fit to view', exact: true }).click();
+  await delay(900);
+  const refittedCamera = (await page.evaluate(() => globalThis.__cortexNativeMetrics)).camera;
+  assert(
+    fittedCamera
+      .split(',')
+      .every(
+        (value, index) =>
+          Math.abs(Number(value) - Number(refittedCamera.split(',')[index])) < 0.003,
+      ),
+    'Fit must restore the product camera after orbit and zoom',
+  );
   await page.getByLabel('Rendering quality').selectOption('auto');
   check('Native camera orbit, zoom, reset, fit and adaptive quality selection');
   await page.mouse.move(10, 10);
@@ -257,6 +337,13 @@ try {
         status,
         deviceCounts,
         unavailableCategories: fresh.unavailable,
+        adapterClasses: fresh.gpu.map((g) => ({
+          name: g.name,
+          class: g.properties['Adapter class'],
+          source: g.properties['Classification source'],
+        })),
+        renderer: nativeMetrics,
+        nativeProfiles,
         checks,
         errors,
         remoteRequests: remote,

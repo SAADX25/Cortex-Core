@@ -19,7 +19,13 @@ export interface HardwareScan {
 }
 const fields: Record<HardwareCategory | 'bios', string[]> = {
   cpu: ['Manufacturer', 'Physical cores', 'Logical processors', 'Max clock (MHz)', 'Architecture'],
-  gpu: ['Vendor', 'Driver version', 'Dedicated VRAM (bytes)'],
+  gpu: [
+    'Vendor',
+    'Driver version',
+    'Dedicated VRAM (bytes)',
+    'Adapter class',
+    'Classification source',
+  ],
   memory: [
     'Manufacturer',
     'Part number',

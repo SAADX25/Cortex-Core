@@ -126,6 +126,8 @@ fn normalize(raw: Raw, scanned_at: u64) -> Hardware {
                 &[
                     ("Vendor", "AdapterCompatibility"),
                     ("Driver version", "DriverVersion"),
+                    ("Adapter class", "AdapterClass"),
+                    ("Classification source", "ClassificationSource"),
                 ],
             );
             // WMI AdapterRAM is a 32-bit value and is deliberately never used.
@@ -133,6 +135,24 @@ fn normalize(raw: Raw, scanned_at: u64) -> Hardware {
                 "Dedicated VRAM (bytes)".into(),
                 numeric(r, "DedicatedVideoMemory"),
             );
+            let name = d.name.to_lowercase();
+            if [
+                "vmware",
+                "virtualbox",
+                "microsoft remote display",
+                "parallels display",
+                "hyper-v video",
+            ]
+            .iter()
+            .any(|token| name.contains(token))
+            {
+                d.properties
+                    .insert("Adapter class".into(), "Virtual".into());
+                d.properties.insert(
+                    "Classification source".into(),
+                    "Recognized virtual display provider".into(),
+                );
+            }
             d
         })
         .collect();
@@ -464,11 +484,20 @@ fn collect() -> Raw {
             for r in &mut raw.gpu {
                 let matches: Vec<_> = adapters
                     .iter()
-                    .filter(|(name, _)| *name == text(r, "Name"))
+                    .filter(|(name, _, _)| *name == text(r, "Name"))
                     .collect();
                 let peers = matches.len();
                 if peers == 1 && names.iter().filter(|n| **n == text(r, "Name")).count() == 1 {
                     r.insert("DedicatedVideoMemory".into(), Value::from(matches[0].1));
+                    r.insert("AdapterClass".into(), Value::from(matches[0].2));
+                    r.insert(
+                        "ClassificationSource".into(),
+                        Value::from(if matches[0].2 == "Unknown" {
+                            "Unknown"
+                        } else {
+                            "DXGI / DXCore"
+                        }),
+                    );
                 }
             }
         }
@@ -477,13 +506,54 @@ fn collect() -> Raw {
     raw
 }
 #[cfg(windows)]
-fn dxgi_memory() -> windows::core::Result<Vec<(String, u64)>> {
+struct DxCoreLibrary(windows::Win32::Foundation::HMODULE);
+#[cfg(windows)]
+impl Drop for DxCoreLibrary {
+    fn drop(&mut self) {
+        unsafe {
+            let _ = windows::Win32::Foundation::FreeLibrary(self.0);
+        }
+    }
+}
+#[cfg(windows)]
+fn optional_dxcore_factory() -> Option<(
+    windows::Win32::Graphics::DXCore::IDXCoreAdapterFactory,
+    DxCoreLibrary,
+)> {
+    use windows::Win32::Graphics::DXCore::IDXCoreAdapterFactory;
+    use windows::Win32::System::LibraryLoader::{
+        GetProcAddress, LOAD_LIBRARY_SEARCH_SYSTEM32, LoadLibraryExW,
+    };
+    use windows::core::{GUID, HRESULT, Interface, s, w};
+    // Older Windows releases may lack DXCore. Load only the fixed System32 DLL,
+    // and retain it until the factory and all adapters have released their COM references.
+    unsafe {
+        let library = DxCoreLibrary(
+            LoadLibraryExW(w!("dxcore.dll"), None, LOAD_LIBRARY_SEARCH_SYSTEM32).ok()?,
+        );
+        let address = GetProcAddress(library.0, s!("DXCoreCreateAdapterFactory"))?;
+        let create: unsafe extern "system" fn(*const GUID, *mut *mut std::ffi::c_void) -> HRESULT =
+            std::mem::transmute(address);
+        let mut pointer = std::ptr::null_mut();
+        create(&IDXCoreAdapterFactory::IID, &mut pointer)
+            .ok()
+            .ok()?;
+        if pointer.is_null() {
+            return None;
+        }
+        Some((IDXCoreAdapterFactory::from_raw(pointer), library))
+    }
+}
+#[cfg(windows)]
+fn dxgi_memory() -> windows::core::Result<Vec<(String, u64, &'static str)>> {
+    use windows::Win32::Graphics::DXCore::{IDXCoreAdapter, IsHardware, IsIntegrated};
     use windows::Win32::Graphics::Dxgi::{
         CreateDXGIFactory1, DXGI_ADAPTER_FLAG_SOFTWARE, DXGI_ERROR_NOT_FOUND, IDXGIFactory1,
     };
     // COM interface ownership is handled by windows-rs. No raw pointer escapes this function.
     unsafe {
         let factory: IDXGIFactory1 = CreateDXGIFactory1()?;
+        let core = optional_dxcore_factory();
         let mut adapters = Vec::new();
         for i in 0..64 {
             let adapter = match factory.EnumAdapters1(i) {
@@ -492,9 +562,46 @@ fn dxgi_memory() -> windows::core::Result<Vec<(String, u64)>> {
                 Err(e) => return Err(e),
             };
             let d = adapter.GetDesc1()?;
-            if d.Flags & DXGI_ADAPTER_FLAG_SOFTWARE.0 as u32 != 0 {
-                continue;
-            }
+            // Never infer integration from vendor, marketing name or VRAM size.
+            // LUID is used only for this in-memory join and never crosses IPC.
+            let class = if d.Flags & DXGI_ADAPTER_FLAG_SOFTWARE.0 as u32 != 0 {
+                "Software"
+            } else {
+                core.as_ref()
+                    .and_then(|(factory, _library)| {
+                        let adapter: IDXCoreAdapter =
+                            factory.GetAdapterByLuid(&d.AdapterLuid).ok()?;
+                        if !adapter.IsPropertySupported(IsHardware)
+                            || !adapter.IsPropertySupported(IsIntegrated)
+                        {
+                            return None;
+                        }
+                        let mut hardware = false;
+                        let mut integrated = false;
+                        adapter
+                            .GetProperty(
+                                IsHardware,
+                                size_of::<bool>(),
+                                (&mut hardware as *mut bool).cast(),
+                            )
+                            .ok()?;
+                        adapter
+                            .GetProperty(
+                                IsIntegrated,
+                                size_of::<bool>(),
+                                (&mut integrated as *mut bool).cast(),
+                            )
+                            .ok()?;
+                        Some(if !hardware {
+                            "Software"
+                        } else if integrated {
+                            "Integrated"
+                        } else {
+                            "Discrete"
+                        })
+                    })
+                    .unwrap_or("Unknown")
+            };
             let len = d
                 .Description
                 .iter()
@@ -505,6 +612,7 @@ fn dxgi_memory() -> windows::core::Result<Vec<(String, u64)>> {
                     .trim()
                     .to_owned(),
                 d.DedicatedVideoMemory as u64,
+                class,
             ));
         }
         Ok(adapters)
@@ -563,6 +671,34 @@ mod tests {
     use super::*;
     fn row(v: Value) -> Row {
         serde_json::from_value(v).unwrap()
+    }
+    #[test]
+    fn adapter_classification_is_not_inferred_from_vram_or_vendor() {
+        let scan = normalize(
+            Raw {
+                gpu: vec![
+                    row(
+                        serde_json::json!({"Name":"NVIDIA named adapter", "DedicatedVideoMemory":17179869184_u64}),
+                    ),
+                    row(
+                        serde_json::json!({"Name":"Intel named adapter", "AdapterClass":"Integrated", "ClassificationSource":"DXGI / DXCore"}),
+                    ),
+                    row(serde_json::json!({"Name":"VMware SVGA", "AdapterClass":"Discrete"})),
+                ],
+                ..Raw::default()
+            },
+            1,
+        );
+        for gpu in scan.gpu {
+            assert_eq!(
+                gpu.properties["Adapter class"],
+                match gpu.name.as_str() {
+                    "Intel named adapter" => "Integrated",
+                    "VMware SVGA" => "Virtual",
+                    _ => UNKNOWN,
+                }
+            );
+        }
     }
     #[test]
     fn missing_and_malformed_fields() {

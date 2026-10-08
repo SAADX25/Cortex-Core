@@ -1,5 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
-import { fixtureCatalog } from '@cortex/data-access';
+import { adapterClass, storagePlacement } from '@cortex/asset-runtime';
 import type { CameraAction, ComponentId, QualityMode, DetectedScene } from '@cortex/3d-engine';
 import type { HardwareCategory, HardwareScan } from '../hardware';
 import { categoryNames } from '../hardware';
@@ -9,8 +9,6 @@ import { isDesktop, recordGraphicsFailure, setDesktopFullscreen } from '../platf
 import { supportsWebGL2 } from './graphics';
 import { GraphicsBoundary } from './GraphicsBoundary';
 const Renderer = lazy(() => import('@cortex/3d-engine/renderer'));
-// Fixture metadata is used only to locate the existing procedural template. No fixture specification enters a detected record or inspector.
-const board = fixtureCatalog.find((p) => p.category === 'motherboard')!;
 function categoryForRegion(id: ComponentId): HardwareCategory {
   if (id === 'motherboard.cpuSocket') return 'cpu';
   if (id.includes('.dimm.')) return 'memory';
@@ -21,6 +19,7 @@ function categoryForRegion(id: ComponentId): HardwareCategory {
 export default function DetectedViewer({ scan }: { scan: HardwareScan }) {
   const [selected, setSelected] = useState<HardwareCategory | null>(null);
   const [deviceIndex, setDeviceIndex] = useState<number | undefined>();
+  const [visualSelection, setVisualSelection] = useState<DetectedScene['selected']>();
   const [region, setRegion] = useState<ComponentId | null>(null);
   const [hovered, setHovered] = useState<ComponentId | null>(null);
   const [quality, setQuality] = useState<QualityMode>('auto');
@@ -47,11 +46,26 @@ export default function DetectedViewer({ scan }: { scan: HardwareScan }) {
   const selectDevice = useCallback((category: HardwareCategory, index?: number) => {
     setDeviceIndex(index);
     setSelected(category);
+    setVisualSelection({ category, index });
   }, []);
   const detected: DetectedScene = {
     devices: (['cpu', 'gpu', 'memory', 'storage'] as const).flatMap((category) =>
-      scan[category].map((_, index) => ({ category, index })),
+      scan[category].flatMap((device, index) =>
+        category === 'gpu' && adapterClass(device) !== 'discrete'
+          ? []
+          : [
+              {
+                category,
+                index,
+                name: device.name,
+                ...(category === 'storage' ? { placement: storagePlacement(device) } : {}),
+              },
+            ],
+      ),
     ),
+    boardFamily: 'oem',
+    boardName: scan.motherboard[0]?.name ?? 'Motherboard not reported',
+    selected: visualSelection,
     onSelect: selectDevice,
   };
   const command = (action: CameraAction) =>
@@ -105,8 +119,9 @@ export default function DetectedViewer({ scan }: { scan: HardwareScan }) {
       <p className="visual-note">
         Generic visualization — specifications are from your detected hardware.
         <br />
-        Component shapes, board size and placement are illustrative. Socket, physical layout and
-        integrated versus discrete adapter placement are not inferred.
+        Generic motherboard visualization · OEM / unknown layout. Socket, form factor and slot
+        occupancy are illustrative. Only system-confirmed discrete adapters appear as cards. Storage
+        inventory does not imply a physical location.
       </p>
       <div className="detected-toolbar">
         <button className="button secondary" onClick={() => command('reset')}>
@@ -130,7 +145,11 @@ export default function DetectedViewer({ scan }: { scan: HardwareScan }) {
           >
             {['auto', 'low', 'medium', 'high'].map((q) => (
               <option key={q} value={q}>
-                {q === 'auto' ? 'Automatic' : q[0]!.toUpperCase() + q.slice(1)}
+                {q === 'auto'
+                  ? 'Automatic'
+                  : q === 'medium'
+                    ? 'Standard'
+                    : q[0]!.toUpperCase() + q.slice(1)}
               </option>
             ))}
           </select>
@@ -154,7 +173,7 @@ export default function DetectedViewer({ scan }: { scan: HardwareScan }) {
             Exit fullscreen
           </button>
         )}
-        {graphics && board.category === 'motherboard' ? (
+        {graphics ? (
           <GraphicsBoundary
             fallback={fallback}
             onError={() => {
@@ -170,7 +189,6 @@ export default function DetectedViewer({ scan }: { scan: HardwareScan }) {
               }
             >
               <Renderer
-                board={board}
                 detected={detected}
                 selected={region}
                 hovered={hovered}
@@ -184,8 +202,12 @@ export default function DetectedViewer({ scan }: { scan: HardwareScan }) {
                 reducedMotion={reducedMotion}
                 quality={quality}
                 cameraCommand={camera}
-                diagnostics={false}
-                onMetrics={() => undefined}
+                diagnostics={new URLSearchParams(location.search).get('rendererMetrics') === '1'}
+                onMetrics={(metrics) =>
+                  window.dispatchEvent(
+                    new CustomEvent('cortex-render-metrics', { detail: metrics }),
+                  )
+                }
                 onFailure={failed}
               />
             </Suspense>
@@ -193,21 +215,45 @@ export default function DetectedViewer({ scan }: { scan: HardwareScan }) {
         ) : (
           fallback
         )}
+        <button className="board-caption" onClick={() => selectDevice('motherboard')}>
+          {scan.motherboard[0]?.properties.Manufacturer &&
+          scan.motherboard[0].properties.Manufacturer !== 'Unknown'
+            ? `${scan.motherboard[0].properties.Manufacturer} · `
+            : ''}
+          {scan.motherboard[0]?.name ?? 'Motherboard not reported'}
+          <small>Generic motherboard visualization</small>
+        </button>
+        {!!scan.storage.length && (
+          <div className="storage-caption">
+            Detected Storage · {scan.storage.length} physical devices
+            <small>Inventory · location and form factor unknown</small>
+          </div>
+        )}
       </div>
       <nav className="detected-components" aria-label="Detected components">
         <button className="button secondary" onClick={() => selectDevice('motherboard')}>
           Motherboard
         </button>
-        {detected.devices.map((d) => (
-          <button
-            className="button secondary"
-            key={`${d.category}-${d.index}`}
-            onClick={() => selectDevice(d.category, d.index)}
-          >
-            {categoryNames[d.category]}
-            {scan[d.category].length > 1 ? ` ${d.index + 1}` : ''}
-          </button>
-        ))}
+        {(['cpu', 'gpu', 'memory', 'storage'] as const).flatMap((category) =>
+          scan[category].map((device, index) => (
+            <button
+              className="button secondary"
+              key={`${category}-${index}`}
+              aria-label={`${categoryNames[category]}${scan[category].length > 1 ? ` ${index + 1}` : ''}`}
+              onClick={() => selectDevice(category, index)}
+            >
+              {categoryNames[category]}
+              {scan[category].length > 1 ? ` ${index + 1}` : ''}
+              <small>
+                {category === 'gpu'
+                  ? `${adapterClass(device) === 'discrete' ? 'Generic discrete GPU' : `${adapterClass(device)} · system information`} — ${device.name}`
+                  : category === 'storage'
+                    ? `${device.name} · inventory, location unknown`
+                    : `${device.name} · generic shape`}
+              </small>
+            </button>
+          )),
+        )}
       </nav>
       {selected && (
         <HardwareInspector

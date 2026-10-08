@@ -22,6 +22,8 @@ export const hardwareFixture: HardwareScan = {
         Vendor: 'Test vendor',
         'Driver version': '1.0',
         'Dedicated VRAM (bytes)': 'Unknown',
+        'Adapter class': 'Integrated',
+        'Classification source': 'DXGI / DXCore',
       },
     },
     {
@@ -30,6 +32,8 @@ export const hardwareFixture: HardwareScan = {
         Vendor: 'Test vendor',
         'Driver version': '2.0',
         'Dedicated VRAM (bytes)': '17179869184',
+        'Adapter class': 'Discrete',
+        'Classification source': 'DXGI / DXCore',
       },
     },
   ],

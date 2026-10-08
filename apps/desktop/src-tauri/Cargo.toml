@@ -28,7 +28,7 @@ rusqlite = { version = "=0.40.2", features = ["bundled"] }
 
 [target.'cfg(windows)'.dependencies]
 wmi = "=0.18.4"
-windows = { version = "=0.62.2", features = ["Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common", "Win32_System_SystemInformation"] }
+windows = { version = "=0.62.2", features = ["Win32_Graphics_Dxgi", "Win32_Graphics_Dxgi_Common", "Win32_Graphics_DXCore", "Win32_System_LibraryLoader", "Win32_System_SystemInformation"] }
 
 [features]
 default = ["custom-protocol"]

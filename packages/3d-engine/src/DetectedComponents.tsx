@@ -1,136 +1,246 @@
-import { useLayoutEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useThree, type ThreeEvent } from '@react-three/fiber';
-import { InstancedMesh, Matrix4 } from 'three';
+import {
+  Box3,
+  BoxGeometry,
+  EdgesGeometry,
+  InstancedMesh,
+  Matrix4,
+  MeshStandardMaterial,
+  PlaneGeometry,
+  Vector3,
+} from 'three';
+import { boardFamilies, resolveDetectedVisual, type BoardFamily } from '@cortex/asset-runtime';
+import {
+  boardModel,
+  deviceModel,
+  finishes,
+  type Finish,
+  type Instances,
+  type Model,
+} from './detected-models';
+import type { QualityLevel } from './quality';
+import type { Vector3Tuple } from './semantics';
 export interface DetectedVisual {
   category: 'cpu' | 'gpu' | 'memory' | 'storage';
   index: number;
+  name: string;
+  placement?: 'm2' | 'inventory';
 }
 export interface DetectedScene {
   devices: DetectedVisual[];
-  onSelect(category: DetectedVisual['category'], index: number): void;
+  boardFamily: BoardFamily;
+  boardName: string;
+  selected?: { category: string; index?: number };
+  onSelect(category: DetectedVisual['category'] | 'motherboard', index?: number): void;
 }
-function Box({
-  size,
-  position,
-  color,
-  metal = 0.25,
-}: {
-  size: [number, number, number];
-  position?: [number, number, number];
-  color: string;
-  metal?: number;
-}) {
-  return (
-    <mesh position={position} castShadow receiveShadow>
-      <boxGeometry args={size} />
-      <meshStandardMaterial color={color} roughness={0.42} metalness={metal} />
-    </mesh>
+type Materials = Record<Finish, MeshStandardMaterial>;
+function Repeat({ batch, material }: { batch: Instances; material: MeshStandardMaterial }) {
+  const ref = useRef<InstancedMesh>(null),
+    { invalidate } = useThree();
+  const flat = batch.flat,
+    width = batch.size[0],
+    depth = batch.size[2];
+  const flatGeometry = useMemo(
+    () => (flat ? new PlaneGeometry(width, depth).rotateX(-Math.PI / 2) : null),
+    [flat, width, depth],
   );
-}
-function FanBlades() {
-  const ref = useRef<InstancedMesh>(null);
-  const { invalidate } = useThree();
-  useLayoutEffect(() => {
+  useEffect(() => () => flatGeometry?.dispose(), [flatGeometry]);
+  useEffect(() => {
     const matrix = new Matrix4();
-    for (let i = 0; i < 9; i++) {
-      const angle = (i * Math.PI * 2) / 9;
-      matrix.makeRotationY(angle);
-      matrix.setPosition(
-        0.012 * Math.cos(angle) + 0.005 * Math.sin(angle),
-        0.002,
-        -0.012 * Math.sin(angle) + 0.005 * Math.cos(angle),
-      );
+    batch.positions.forEach((p, i) => {
+      matrix.makeTranslation(...p);
       ref.current?.setMatrixAt(i, matrix);
+    });
+    if (ref.current) {
+      ref.current.instanceMatrix.needsUpdate = true;
+      ref.current.computeBoundingSphere();
     }
-    if (ref.current) ref.current.instanceMatrix.needsUpdate = true;
     invalidate();
-  }, [invalidate]);
+  }, [batch, invalidate]);
   return (
-    <instancedMesh ref={ref} args={[undefined, undefined, 9]} raycast={() => null}>
-      <boxGeometry args={[0.007, 0.002, 0.025]} />
-      <meshStandardMaterial color="#60716b" roughness={0.42} metalness={0.25} />
+    <instancedMesh
+      ref={ref}
+      args={[undefined, material, batch.positions.length]}
+      castShadow
+      receiveShadow
+    >
+      {batch.flat ? (
+        <primitive object={flatGeometry!} attach="geometry" />
+      ) : batch.cylinder ? (
+        <cylinderGeometry args={[batch.size[0] / 2, batch.size[0] / 2, batch.size[1], 12]} />
+      ) : (
+        <boxGeometry args={batch.size} />
+      )}
     </instancedMesh>
   );
 }
-export default function DetectedComponents({ scene }: { scene: DetectedScene }) {
+function ModelMeshes({ model, materials }: { model: Model; materials: Materials }) {
+  useEffect(
+    () => () => {
+      for (const m of model.meshes) m.geometry.dispose();
+    },
+    [model],
+  );
   return (
     <>
-      {scene.devices.map(({ category, index }) => {
-        // This is an illustrative category layout, never a claim about sockets, slots or form factor.
-        const position: [number, number, number] =
-          category === 'cpu'
-            ? [-0.022 + index * 0.06, 0.016, -0.066]
-            : category === 'memory'
-              ? [0.048 + (index % 4) * 0.014, 0.03, -0.058 + Math.floor(index / 4) * 0.16]
-              : category === 'gpu'
-                ? [-0.015, 0.045 + index * 0.052, 0.046]
-                : [-0.08 + index * 0.056, 0.012, 0.22];
+      {model.meshes.map((m) => (
+        <mesh
+          key={m.finish}
+          geometry={m.geometry}
+          material={materials[m.finish]}
+          castShadow
+          receiveShadow
+        />
+      ))}
+      {model.instances.map((batch, i) => (
+        <Repeat key={i} batch={batch} material={materials[batch.finish]} />
+      ))}
+    </>
+  );
+}
+function Selection({ bounds }: { bounds: Box3 }) {
+  const size = bounds.getSize(new Vector3()).addScalar(2),
+    center = bounds.getCenter(new Vector3());
+  const geometry = useMemo(() => {
+    const box = new BoxGeometry(size.x, size.y, size.z),
+      edges = new EdgesGeometry(box);
+    box.dispose();
+    return edges;
+  }, [size.x, size.y, size.z]);
+  useEffect(() => () => geometry.dispose(), [geometry]);
+  return (
+    <lineSegments position={center} geometry={geometry} raycast={() => null}>
+      <lineBasicMaterial color="#b9ceab" transparent opacity={0.45} depthWrite={false} />
+    </lineSegments>
+  );
+}
+function Device({
+  device,
+  scene,
+  materials,
+  detail,
+  position,
+}: {
+  device: DetectedVisual;
+  scene: DetectedScene;
+  materials: Materials;
+  detail: number;
+  position: Vector3Tuple;
+}) {
+  const { category, placement } = device;
+  const model = useMemo(
+    () => deviceModel({ category, placement }, detail),
+    [category, placement, detail],
+  );
+  const selected =
+    scene.selected?.category === device.category && scene.selected.index === device.index;
+  return (
+    <group
+      position={position}
+      userData={{
+        detectedCategory: device.category,
+        detectedIndex: device.index,
+        assetId: resolveDetectedVisual(device.category).assetId,
+      }}
+      onClick={(event: ThreeEvent<PointerEvent>) => {
+        event.stopPropagation();
+        if (event.delta <= 5) scene.onSelect(device.category, device.index);
+      }}
+    >
+      <ModelMeshes model={model} materials={materials} />
+      {selected && <Selection bounds={model.bounds} />}
+    </group>
+  );
+}
+export default function DetectedComponents({
+  scene,
+  level,
+  lod,
+}: {
+  scene: DetectedScene;
+  level: QualityLevel;
+  lod: number;
+}) {
+  const detail = level === 'low' || lod === 2 ? 0 : level === 'medium' || lod === 1 ? 1 : 2;
+  const layout = boardFamilies[scene.boardFamily];
+  const materials = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(finishes).map(([key, [color, roughness, metalness]]) => [
+          key,
+          new MeshStandardMaterial({ color, roughness, metalness, envMapIntensity: 0.65 }),
+        ]),
+      ) as Materials,
+    [],
+  );
+  useEffect(
+    () => () => {
+      Object.values(materials).forEach((m) => m.dispose());
+    },
+    [materials],
+  );
+  const model = useMemo(() => boardModel(scene.boardFamily, detail), [scene.boardFamily, detail]);
+  const storage = scene.devices.filter((v) => v.category === 'storage' && v.placement !== 'm2');
+  const storageOrder = new Map(storage.map((v, i) => [v.index, i]));
+  const cpuZ = -layout.depth / 2 + 82;
+  return (
+    <group scale={0.001}>
+      <group
+        userData={{
+          detectedCategory: 'motherboard',
+          assetId: resolveDetectedVisual('motherboard', undefined, scene.boardFamily).assetId,
+        }}
+        onClick={(event: ThreeEvent<PointerEvent>) => {
+          event.stopPropagation();
+          if (event.delta <= 5) scene.onSelect('motherboard');
+        }}
+      >
+        <ModelMeshes model={model} materials={materials} />
+        {scene.selected?.category === 'motherboard' && <Selection bounds={model.bounds} />}
+      </group>
+      {scene.devices.map((device) => {
+        const i = device.index,
+          gpuOrder = scene.devices
+            .filter((d) => d.category === 'gpu')
+            .findIndex((d) => d.index === i),
+          trayIndex = storageOrder.get(i) ?? 0;
+        const position: Vector3Tuple =
+          device.category === 'cpu'
+            ? [-20 + i * 55, 7, cpuZ]
+            : device.category === 'memory'
+              ? i < layout.sockets
+                ? [48 + i * 13, 25, cpuZ]
+                : [layout.width / 2 + 50 + (i - layout.sockets) * 12, 27, -layout.depth / 2 + 70]
+              : device.category === 'gpu'
+                ? [-22, 0, layout.depth / 2 - (layout.depth > 200 ? 104 : 27) + gpuOrder * 42]
+                : device.placement === 'm2'
+                  ? [-17, 5, layout.depth / 2 - (layout.depth > 200 ? 104 : 27) - 20]
+                  : [
+                      layout.width / 2 + 56 + (trayIndex % 2) * 68,
+                      0,
+                      -35 + Math.floor(trayIndex / 2) * 56,
+                    ];
         return (
-          <group
-            key={`${category}-${index}`}
+          <Device
+            key={`${device.category}-${i}`}
+            device={device}
+            scene={scene}
+            materials={materials}
+            detail={detail}
             position={position}
-            userData={{ detectedCategory: category, detectedIndex: index }}
-            onClick={(e: ThreeEvent<PointerEvent>) => {
-              e.stopPropagation();
-              if (e.delta > 5) return;
-              scene.onSelect(category, index);
-            }}
-          >
-            {category === 'cpu' ? (
-              <>
-                <Box size={[0.041, 0.006, 0.041]} color="#c5cece" metal={0.85} />
-                <Box
-                  size={[0.03, 0.001, 0.03]}
-                  position={[0, 0.0036, 0]}
-                  color="#9faeae"
-                  metal={0.8}
-                />
-              </>
-            ) : category === 'memory' ? (
-              <>
-                <Box size={[0.007, 0.037, 0.133]} color="#376454" />
-                <Box
-                  size={[0.008, 0.004, 0.124]}
-                  position={[0, -0.019, 0]}
-                  color="#bc9b50"
-                  metal={0.7}
-                />
-                {[-1, 1].map((sign) => (
-                  <Box
-                    key={sign}
-                    size={[0.002, 0.024, 0.048]}
-                    position={[0.004, 0, sign * 0.031]}
-                    color="#1c2b26"
-                  />
-                ))}
-              </>
-            ) : category === 'gpu' ? (
-              <>
-                <Box size={[0.21, 0.03, 0.082]} color="#273436" metal={0.6} />
-                <Box size={[0.208, 0.002, 0.079]} position={[0, -0.017, 0]} color="#436553" />
-                {[-1, 1].map((sign) => (
-                  <group key={sign} position={[sign * 0.053, 0.017, 0]}>
-                    <mesh>
-                      <cylinderGeometry args={[0.032, 0.032, 0.003, 32]} />
-                      <meshStandardMaterial color="#131d1c" />
-                    </mesh>
-                    <FanBlades />
-                    <mesh position={[0, 0.004, 0]}>
-                      <cylinderGeometry args={[0.008, 0.008, 0.003, 16]} />
-                      <meshStandardMaterial color="#a2b69b" metalness={0.7} roughness={0.4} />
-                    </mesh>
-                  </group>
-                ))}
-              </>
-            ) : (
-              <>
-                <Box size={[0.044, 0.014, 0.07]} color="#667570" metal={0.8} />
-                <Box size={[0.03, 0.001, 0.041]} position={[0, 0.008, 0]} color="#26382f" />
-              </>
-            )}
-          </group>
+          />
         );
       })}
-    </>
+      {storage.length > 0 && (
+        <group
+          position={[layout.width / 2 + 90, -2, -9 + Math.floor((storage.length - 1) / 2) * 28]}
+        >
+          <mesh material={materials.tray} receiveShadow>
+            <boxGeometry args={[138, 2, Math.ceil(storage.length / 2) * 56 + 7]} />
+          </mesh>
+        </group>
+      )}
+    </group>
   );
 }

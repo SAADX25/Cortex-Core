@@ -87,6 +87,8 @@ test('generic viewer shows detected devices, details, quality and tears down on 
 }) => {
   await mockScanner(page);
   await page.emulateMedia({ reducedMotion: 'reduce' });
+  const errors: string[] = [];
+  page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('/');
   await expect(page.getByRole('button', { name: 'CPU details', exact: true })).toBeVisible();
   await page.getByRole('link', { name: 'View in 3D', exact: true }).click();
@@ -111,6 +113,8 @@ test('generic viewer shows detected devices, details, quality and tears down on 
   await expect(page.getByLabel('Rendering quality')).toHaveValue('low');
   await page.getByRole('link', { name: 'My PC', exact: true }).click();
   await expect(page.locator('canvas')).toHaveCount(0);
+  await page.waitForTimeout(600);
+  expect(errors).toEqual([]);
 });
 test('graphics fallback keeps actual hardware details usable', async ({ page }) => {
   await mockScanner(page);

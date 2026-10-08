@@ -25,8 +25,8 @@ export const qualityProfiles: Record<QualityLevel, QualityProfile> = {
   },
   medium: {
     dpr: 1.25,
-    shadows: false,
-    shadowMap: 0,
+    shadows: true,
+    shadowMap: 512,
     textureSize: 1024,
     lodBias: 1,
     postProcessing: false,
@@ -64,8 +64,14 @@ export class AdaptiveQualityManager {
   private samples: number[] = [];
   private goodWindows = 0;
   private lastChange = -Infinity;
-  sample(frameMs: number, nowMs: number): QualityLevel {
-    if (!Number.isFinite(frameMs) || frameMs < 1 || frameMs > 100) return this.level;
+  sample(frameMs: number, nowMs: number, continuous = false): QualityLevel {
+    if (
+      !Number.isFinite(frameMs) ||
+      frameMs < 1 ||
+      frameMs > 1000 ||
+      (frameMs > 100 && !continuous)
+    )
+      return this.level;
     this.samples.push(frameMs);
     if (this.samples.length < 90) return this.level;
     const sorted = this.samples.sort((a, b) => a - b);

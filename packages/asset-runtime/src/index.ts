@@ -2,6 +2,7 @@ import type { Part } from '@cortex/part-schema';
 import { assetManifestSchema } from './manifest';
 export * from './manifest';
 export * from './resource-cache';
+export * from './detected-visuals';
 
 export const templateRegistry = {
   'motherboard.atx.v1': { category: 'motherboard', revision: 1 },
@@ -9,6 +10,14 @@ export const templateRegistry = {
   'ram.dimm.v1': { category: 'ram', revision: 1 },
   'gpu.dual-fan.v1': { category: 'gpu', revision: 1 },
   'storage.m2.v1': { category: 'storage', revision: 1 },
+  'detected.board.atx.v2': { category: 'motherboard', revision: 2 },
+  'detected.board.matx.v2': { category: 'motherboard', revision: 2 },
+  'detected.board.itx.v2': { category: 'motherboard', revision: 2 },
+  'detected.board.oem.v2': { category: 'motherboard', revision: 2 },
+  'detected.cpu.v2': { category: 'cpu', revision: 2 },
+  'detected.memory.v2': { category: 'ram', revision: 2 },
+  'detected.gpu.v2': { category: 'gpu', revision: 2 },
+  'detected.storage.v2': { category: 'storage', revision: 2 },
 } as const;
 export function resolveVisualTemplate(part: Part) {
   const id = part.visual.templateId;

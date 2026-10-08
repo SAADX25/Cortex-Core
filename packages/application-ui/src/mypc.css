@@ -312,6 +312,65 @@
   gap: 10px;
   margin-top: 18px;
 }
+.detected-components .button {
+  text-align: left;
+  max-width: 100%;
+}
+.detected-components small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+}
+.board-caption {
+  position: absolute;
+  top: 20px;
+  left: 22px;
+  border: 0;
+  background: #101617cc;
+  color: #d8dfdb;
+  text-align: left;
+  padding: 10px 13px;
+  border-radius: 8px;
+  font-size: 13px;
+  max-width: 65%;
+}
+.board-caption small {
+  display: block;
+  color: #95a39c;
+  font-size: 11px;
+  margin-top: 5px;
+}
+.storage-caption {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  color: #b6c1bb;
+  padding: 10px 13px;
+  border-radius: 8px;
+  background: #101617cc;
+  font-size: 12px;
+  pointer-events: none;
+  max-width: 70%;
+}
+.storage-caption small {
+  display: block;
+  font-size: 11px;
+  color: #95a39c;
+  margin-top: 5px;
+}
+.inventory-label {
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  color: #b6c1bb;
+  text-align: center;
+}
+.inventory-label small {
+  font-size: 10px;
+  letter-spacing: 0;
+  color: #819189;
+}
 .viewer-fullscreen.detected-stage {
   position: fixed;
   inset: 0;
