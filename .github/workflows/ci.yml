@@ -13,15 +13,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
         with:
           version: 10.17.0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24.17.0
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: node tools/desktop/generate-fixtures.mjs --check
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm format:check
@@ -29,8 +30,8 @@ jobs:
       - run: pnpm build
       - run: pnpm exec playwright install --with-deps chromium firefox webkit
       - run: pnpm test:e2e
-      - uses: actions/upload-artifact@v4
-        if: always()
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() && hashFiles('playwright-report/**', 'test-results/**', 'apps/web/dist/budget-report.json') != '' }}
         with:
           name: validation-reports
           path: |
@@ -42,11 +43,11 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 35
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
         with:
           version: 10.17.0
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24.17.0
           cache: pnpm
@@ -58,7 +59,8 @@ jobs:
       - run: node tools/desktop/run.mjs rust-fmt
       - run: pnpm desktop:check
       - run: pnpm desktop:test
-      - run: pnpm desktop:build
+      - id: desktop-build
+        run: pnpm desktop:build
       - name: Install unsigned development package for smoke validation
         shell: pwsh
         run: |
@@ -69,10 +71,11 @@ jobs:
           $env:CORTEX_DESKTOP_EXE = Join-Path $installDirectory 'Cortex Core.exe'
           pnpm test:desktop
           if ($LASTEXITCODE -ne 0) { throw 'Native smoke validation failed' }
-      - uses: actions/upload-artifact@v4
-        if: always()
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() && steps.desktop-build.outcome == 'success' }}
         with:
           name: cortex-core-windows-x64-unsigned-development
+          include-hidden-files: true
           path: |
             apps/desktop/src-tauri/target/release/bundle/nsis/*-setup.exe
             .artifacts/desktop/*.json

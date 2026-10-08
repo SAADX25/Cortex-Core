@@ -17,7 +17,8 @@ const generated =
     2,
   ) + '\n';
 if (process.argv.includes('--check')) {
-  if ((await readFile(destination, 'utf8')) !== generated)
+  // Git may check out LF files as CRLF on Windows; content must still match exactly.
+  if ((await readFile(destination, 'utf8')).replaceAll('\r\n', '\n') !== generated)
     throw new Error('Native bundled fixtures are stale; run tools/desktop/generate-fixtures.mjs.');
   console.log('Native catalog fixtures match the shared schema fixtures.');
 } else await writeFile(destination, generated);
