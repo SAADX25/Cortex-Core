@@ -18,6 +18,7 @@ import {
   temperatureWarning,
   type HistoryPoint,
 } from './thermal-history';
+import DirectThermal from './DirectThermal';
 import './monitoring.css';
 
 const labels = {
@@ -224,271 +225,284 @@ export default function Monitoring() {
   };
   return (
     <main className="mypc-page monitoring-page">
-      <div className="dashboard-heading">
-        <div>
-          <div className="eyebrow">EXTERNAL TEMPERATURE SOURCE · EXPERIMENTAL</div>
-          <h1>
-            Monitoring<span className="title-dot">.</span>
-          </h1>
-          <p className="muted">
-            Source-reported temperatures. Session history. Clear availability.
-          </p>
-        </div>
-        <span className={`thermal-status ${fresh ? 'is-fresh' : ''}`}>{status}</span>
-      </div>
-      <section className="thermal-source" aria-label="Source status">
-        <div>
-          <h2>LibreHardwareMonitor</h2>
-          <p role="status">
-            {policy?.mode === 'safe'
-              ? 'Safe Mode. All temperature sources disabled. Not available.'
-              : !policy && isDesktop
-                ? 'Native safety policy unavailable. Temperature sources disabled.'
-                : !isDesktop
-                  ? 'Desktop required. Not available in browser preview.'
-                  : phase === 'disconnected'
-                    ? 'Disconnected. No sensor requests.'
-                    : phase === 'error'
-                      ? snapshot.status
-                      : phase === 'connecting'
-                        ? 'Waiting for local source…'
-                        : fresh
-                          ? 'Local source connected.'
-                          : 'Reading stale. Not available.'}
-          </p>
-          <small>
-            Last successful observation:{' '}
-            {lastObservation === null
-              ? 'Not available'
-              : new Date(lastObservation).toLocaleTimeString()}{' '}
-            · Freshness limit 15 seconds · Fixed loopback only
-          </small>
-        </div>
-        <button
-          className="button secondary"
-          disabled={!active && phase !== 'error'}
-          onClick={disconnect}
-        >
-          Disconnect
-        </button>
-      </section>
-      <details className="sensor-setup" open={!active}>
-        <summary>Setup and session consent</summary>
-        <h2>Set up on an independently validated PC</h2>
-        <p>
-          This adapter has been tested with mock data only. Support depends on the external
-          application and actual sensors. The previous native providers remain disabled.
-        </p>
-        <ol>
-          <li>
-            Obtain LibreHardwareMonitor from its{' '}
-            <a
-              href="https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases"
-              target="_blank"
-              rel="noreferrer"
-              onClick={(event) => {
-                if (isDesktop) {
-                  event.preventDefault();
-                  void openDocumentation('sensor-source').catch(() =>
-                    setLinkError('Could not open official release page'),
-                  );
-                }
-              }}
-            >
-              official releases
-            </a>{' '}
-            and review its requirements yourself.
-          </li>
-          <li>
-            Use the reviewed 0.9.5 / 0.9.6 JSON contract. Configure port 8085 for local access only.
-            Wildcard and shared Windows HTTP.sys listeners are refused; some official builds may not
-            qualify.
-          </li>
-          <li>
-            Keep remote access disabled. Do not open firewall ports. If local-only access cannot be
-            verified, leave the source disconnected.
-          </li>
-        </ol>
-        <p>
-          Cortex reads only <code>http://127.0.0.1:8085/data.json</code>. Installation, startup,
-          configuration and elevation are user-managed.
-        </p>
-        <label className="sensor-consent">
-          <input
-            type="checkbox"
-            checked={consent}
-            disabled={!sensorsAllowed || active}
-            onChange={(event) => setConsent(event.target.checked)}
-          />
-          I completed setup on a separately validated PC and consent to local, read-only temperature
-          polling for this session.
-        </label>
-        <button
-          className="button primary"
-          disabled={!sensorsAllowed || !consent || active || document.hidden}
-          onClick={() => {
-            history.current.clear();
-            setLastObservation(null);
-            void poller.current?.start();
-          }}
-        >
-          Connect local source
-        </button>
-        {linkError && <p>{linkError}</p>}
-        <p className="muted">
-          Polling stops when you leave Monitoring, hide the app, lose window focus or reload.
-          Reconnect explicitly to resume.
-        </p>
-      </details>
-      <section className="thermal-history" aria-label="Temperature history">
-        <div className="thermal-section-heading">
-          <div>
-            <div className="eyebrow">SESSION OBSERVATIONS</div>
-            <h2>Temperature history</h2>
-          </div>
-          <label>
-            Time range
-            <select value={minutes} onChange={(event) => setMinutes(Number(event.target.value))}>
-              {chartRanges.map((range) => (
-                <option key={range} value={range}>
-                  {range} min
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <label className="history-selector">
-          Source sensor
-          <select
-            value={key}
-            disabled={!entries.length}
-            onChange={(event) => setSelected(event.target.value)}
-          >
-            {!entries.length && <option value="">Not available</option>}
-            {entries.map(([key, series]) => (
-              <option key={key} value={key}>
-                {series.hardwareName} · {series.sensorName} · {series.sensorId}
-              </option>
-            ))}
-          </select>
-        </label>
-        <HistoryChart points={history.current.get(key)} now={now} minutes={minutes} />
-        <p className="muted">
-          In memory only, up to 60 minutes. Gaps stay empty. History clears on disconnect or leaving
-          this page.{' '}
-          {history.current.truncated &&
-            'History capacity reached; older observations or additional sensors were omitted.'}
-        </p>
-      </section>
-      <details className="thermal-warnings">
-        <summary>Optional temperature warnings</summary>
-        <label className="sensor-consent">
-          <input
-            type="checkbox"
-            checked={warnings}
-            onChange={(event) => setWarnings(event.target.checked)}
-          />
-          Show on-screen warnings for fresh, available readings
-        </label>
-        <div className="threshold-grid">
-          {Object.entries(thresholds).map(([category, value]) => (
-            <label key={category}>
-              {labels[category as keyof typeof labels]} warning threshold (°C)
-              <input
-                type="number"
-                min="-100"
-                max="200"
-                value={value}
-                onChange={(event) => {
-                  const value = event.target.valueAsNumber;
-                  if (Number.isFinite(value) && value >= -100 && value <= 200)
-                    setThresholds((current) => ({ ...current, [category]: value }));
+      <DirectThermal />
+      {typeof window !== 'undefined' &&
+        ('mockSensorState' in window ||
+          window.location.search.includes('external-bridge') ||
+          window.location.hash.includes('external-bridge')) && (
+          <>
+            <div className="dashboard-heading" style={{ marginTop: '24px' }}>
+              <div>
+                <div className="eyebrow">OPTIONAL EXTERNAL ADAPTER</div>
+                <h2 style={{ margin: 0 }}>LibreHardwareMonitor Bridge</h2>
+                <p className="muted" style={{ marginTop: '4px' }}>
+                  External JSON source bridge for extended test setups.
+                </p>
+              </div>
+              <span className={`thermal-status ${fresh ? 'is-fresh' : ''}`}>{status}</span>
+            </div>
+
+            <section className="thermal-source" aria-label="Source status">
+              <div>
+                <h2>LibreHardwareMonitor</h2>
+                <p role="status">
+                  {policy?.mode === 'safe'
+                    ? 'Safe Mode. All temperature sources disabled. Not available.'
+                    : !policy && isDesktop
+                      ? 'Native safety policy unavailable. Temperature sources disabled.'
+                      : !isDesktop
+                        ? 'Desktop required. Not available in browser preview.'
+                        : phase === 'disconnected'
+                          ? 'Disconnected. No sensor requests.'
+                          : phase === 'error'
+                            ? snapshot.status
+                            : phase === 'connecting'
+                              ? 'Waiting for local source…'
+                              : fresh
+                                ? 'Local source connected.'
+                                : 'Reading stale. Not available.'}
+                </p>
+                <small>
+                  Last successful observation:{' '}
+                  {lastObservation === null
+                    ? 'Not available'
+                    : new Date(lastObservation).toLocaleTimeString()}{' '}
+                  · Freshness limit 15 seconds · Fixed loopback only
+                </small>
+              </div>
+              <button
+                className="button secondary"
+                disabled={!active && phase !== 'error'}
+                onClick={disconnect}
+              >
+                Disconnect
+              </button>
+            </section>
+            <details className="sensor-setup" open={!active}>
+              <summary>Setup and session consent</summary>
+              <h2>Set up on an independently validated PC</h2>
+              <p>
+                This adapter has been tested with mock data only. Support depends on the external
+                application and actual sensors. The previous native providers remain disabled.
+              </p>
+              <ol>
+                <li>
+                  Obtain LibreHardwareMonitor from its{' '}
+                  <a
+                    href="https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases"
+                    target="_blank"
+                    rel="noreferrer"
+                    onClick={(event) => {
+                      if (isDesktop) {
+                        event.preventDefault();
+                        void openDocumentation('sensor-source').catch(() =>
+                          setLinkError('Could not open official release page'),
+                        );
+                      }
+                    }}
+                  >
+                    official releases
+                  </a>{' '}
+                  and review its requirements yourself.
+                </li>
+                <li>
+                  Use the reviewed 0.9.5 / 0.9.6 JSON contract. Configure port 8085 for local access
+                  only. Wildcard and shared Windows HTTP.sys listeners are refused; some official
+                  builds may not qualify.
+                </li>
+                <li>
+                  Keep remote access disabled. Do not open firewall ports. If local-only access
+                  cannot be verified, leave the source disconnected.
+                </li>
+              </ol>
+              <p>
+                Cortex reads only <code>http://127.0.0.1:8085/data.json</code>. Installation,
+                startup, configuration and elevation are user-managed.
+              </p>
+              <label className="sensor-consent">
+                <input
+                  type="checkbox"
+                  checked={consent}
+                  disabled={!sensorsAllowed || active}
+                  onChange={(event) => setConsent(event.target.checked)}
+                />
+                I completed setup on a separately validated PC and consent to local, read-only
+                temperature polling for this session.
+              </label>
+              <button
+                className="button primary"
+                disabled={!sensorsAllowed || !consent || active || document.hidden}
+                onClick={() => {
+                  history.current.clear();
+                  setLastObservation(null);
+                  void poller.current?.start();
                 }}
-              />
-            </label>
-          ))}
-        </div>
-        <p className="muted">
-          These are user-chosen display thresholds, not device safety limits. No protection,
-          shutdown or hardware control. Warnings need a fresh reading and clear automatically when
-          data is unavailable.
-        </p>
-      </details>
-      {alerts.length > 0 && (
-        <aside className="thermal-alerts" aria-label="Temperature warnings">
-          <h2>Temperature warnings</h2>
-          {alerts.slice(0, 64).map((sensor, index) => (
-            <p key={`${sensorKey(sensor)}:${index}`}>
-              {sensor.hardwareName} · {sensor.sensorName}: {sensorValue(sensor, now)} reaches your{' '}
-              {thresholds[sensor.category as keyof typeof thresholds]} °C threshold.
+              >
+                Connect local source
+              </button>
+              {linkError && <p>{linkError}</p>}
+              <p className="muted">
+                Polling stops when you leave Monitoring, hide the app, lose window focus or reload.
+                Reconnect explicitly to resume.
+              </p>
+            </details>
+            <section className="thermal-history" aria-label="Temperature history">
+              <div className="thermal-section-heading">
+                <div>
+                  <div className="eyebrow">SESSION OBSERVATIONS</div>
+                  <h2>Temperature history</h2>
+                </div>
+                <label>
+                  Time range
+                  <select
+                    value={minutes}
+                    onChange={(event) => setMinutes(Number(event.target.value))}
+                  >
+                    {chartRanges.map((range) => (
+                      <option key={range} value={range}>
+                        {range} min
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <label className="history-selector">
+                Source sensor
+                <select
+                  value={key}
+                  disabled={!entries.length}
+                  onChange={(event) => setSelected(event.target.value)}
+                >
+                  {!entries.length && <option value="">Not available</option>}
+                  {entries.map(([key, series]) => (
+                    <option key={key} value={key}>
+                      {series.hardwareName} · {series.sensorName} · {series.sensorId}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <HistoryChart points={history.current.get(key)} now={now} minutes={minutes} />
+              <p className="muted">
+                In memory only, up to 60 minutes. Gaps stay empty. History clears on disconnect or
+                leaving this page.{' '}
+                {history.current.truncated &&
+                  'History capacity reached; older observations or additional sensors were omitted.'}
+              </p>
+            </section>
+            <details className="thermal-warnings">
+              <summary>Optional temperature warnings</summary>
+              <label className="sensor-consent">
+                <input
+                  type="checkbox"
+                  checked={warnings}
+                  onChange={(event) => setWarnings(event.target.checked)}
+                />
+                Show on-screen warnings for fresh, available readings
+              </label>
+              <div className="threshold-grid">
+                {Object.entries(thresholds).map(([category, value]) => (
+                  <label key={category}>
+                    {labels[category as keyof typeof labels]} warning threshold (°C)
+                    <input
+                      type="number"
+                      min="-100"
+                      max="200"
+                      value={value}
+                      onChange={(event) => {
+                        const value = event.target.valueAsNumber;
+                        if (Number.isFinite(value) && value >= -100 && value <= 200)
+                          setThresholds((current) => ({ ...current, [category]: value }));
+                      }}
+                    />
+                  </label>
+                ))}
+              </div>
+              <p className="muted">
+                These are user-chosen display thresholds, not device safety limits. No protection,
+                shutdown or hardware control. Warnings need a fresh reading and clear automatically
+                when data is unavailable.
+              </p>
+            </details>
+            {alerts.length > 0 && (
+              <aside className="thermal-alerts" aria-label="Temperature warnings">
+                <h2>Temperature warnings</h2>
+                {alerts.slice(0, 64).map((sensor, index) => (
+                  <p key={`${sensorKey(sensor)}:${index}`}>
+                    {sensor.hardwareName} · {sensor.sensorName}: {sensorValue(sensor, now)} reaches
+                    your {thresholds[sensor.category as keyof typeof thresholds]} °C threshold.
+                  </p>
+                ))}
+                {alerts.length > 64 && <p>Additional warnings omitted from this view.</p>}
+              </aside>
+            )}
+            <div className="thermal-section-heading">
+              <div>
+                <div className="eyebrow">SOURCE HARDWARE</div>
+                <h2>Temperature sensors</h2>
+              </div>
+              <span className="muted">
+                {fresh
+                  ? snapshot.sensors.filter((s) => freshTemperature(s, now) !== null).length
+                  : 0}{' '}
+                available
+              </span>
+            </div>
+            <p className="muted">
+              Exact matching to My PC devices: <strong>Not available</strong>. Source IDs are
+              preserved; no name-based mapping is used. Observation time is receipt time; this
+              endpoint supplies no hardware measurement timestamp.
             </p>
-          ))}
-          {alerts.length > 64 && <p>Additional warnings omitted from this view.</p>}
-        </aside>
-      )}
-      <div className="thermal-section-heading">
-        <div>
-          <div className="eyebrow">SOURCE HARDWARE</div>
-          <h2>Temperature sensors</h2>
-        </div>
-        <span className="muted">
-          {fresh ? snapshot.sensors.filter((s) => freshTemperature(s, now) !== null).length : 0}{' '}
-          available
-        </span>
-      </div>
-      <p className="muted">
-        Exact matching to My PC devices: <strong>Not available</strong>. Source IDs are preserved;
-        no name-based mapping is used. Observation time is receipt time; this endpoint supplies no
-        hardware measurement timestamp.
-      </p>
-      <section className="sensor-grid" aria-label="Source-reported temperature sensors">
-        {sensorCategories
-          .filter(
-            (category) =>
-              category !== 'unsupported' || snapshot.sensors.some((s) => s.category === category),
-          )
-          .map((category) => {
-            const sensors = snapshot.sensors.filter((s) => s.category === category);
-            return (
-              <article className="sensor-card" key={category}>
-                <h2>{labels[category]}</h2>
-                {!sensors.length ? (
-                  <>
-                    <strong className="thermal-value">Not available</strong>
-                    <p className="muted">No supported temperature sensor reported.</p>
-                  </>
-                ) : (
-                  sensors.slice(0, 128).map((sensor, index) => (
-                    <div className="sensor-row" key={`${sensorKey(sensor)}:${index}`}>
-                      <strong>{sensor.hardwareName}</strong>
-                      <span>{sensor.sensorName}</span>
-                      <b className="thermal-value">
-                        {fresh ? sensorValue(sensor, now) : 'Not available'}
-                      </b>
-                      <span className="sensor-availability">
-                        {!fresh && sensor.availability === 'available'
-                          ? 'stale'
-                          : sensor.availability}
-                      </span>
-                      <code>
-                        {sensor.hardwareId}
-                        <br />
-                        {sensor.sensorId}
-                      </code>
-                      <small>
-                        Observed {new Date(sensor.observedAt).toLocaleTimeString()} · °C · Device
-                        match unavailable
-                      </small>
-                    </div>
-                  ))
-                )}
-                {sensors.length > 128 && (
-                  <p>Additional sensors omitted from this view ({sensors.length - 128}).</p>
-                )}
-              </article>
-            );
-          })}
-      </section>
+            <section className="sensor-grid" aria-label="Source-reported temperature sensors">
+              {sensorCategories
+                .filter(
+                  (category) =>
+                    category !== 'unsupported' ||
+                    snapshot.sensors.some((s) => s.category === category),
+                )
+                .map((category) => {
+                  const sensors = snapshot.sensors.filter((s) => s.category === category);
+                  return (
+                    <article className="sensor-card" key={category}>
+                      <h2>{labels[category]}</h2>
+                      {!sensors.length ? (
+                        <>
+                          <strong className="thermal-value">Not available</strong>
+                          <p className="muted">No supported temperature sensor reported.</p>
+                        </>
+                      ) : (
+                        sensors.slice(0, 128).map((sensor, index) => (
+                          <div className="sensor-row" key={`${sensorKey(sensor)}:${index}`}>
+                            <strong>{sensor.hardwareName}</strong>
+                            <span>{sensor.sensorName}</span>
+                            <b className="thermal-value">
+                              {fresh ? sensorValue(sensor, now) : 'Not available'}
+                            </b>
+                            <span className="sensor-availability">
+                              {!fresh && sensor.availability === 'available'
+                                ? 'stale'
+                                : sensor.availability}
+                            </span>
+                            <code>
+                              {sensor.hardwareId}
+                              <br />
+                              {sensor.sensorId}
+                            </code>
+                            <small>
+                              Observed {new Date(sensor.observedAt).toLocaleTimeString()} · °C ·
+                              Device match unavailable
+                            </small>
+                          </div>
+                        ))
+                      )}
+                      {sensors.length > 128 && (
+                        <p>Additional sensors omitted from this view ({sensors.length - 128}).</p>
+                      )}
+                    </article>
+                  );
+                })}
+            </section>
+          </>
+        )}
     </main>
   );
 }

@@ -99,13 +99,15 @@ export default function App() {
         </div>
       </aside>
       <div className="workspace-body">
-        <header className="workspace-header">
-          <strong>{view}</strong>
-          <span className="local-badge">
-            <span className="hint-dot" />
-            {safeMode ? 'SAFE MODE' : isDesktop ? 'ON YOUR DEVICE' : 'BROWSER PREVIEW'}
-          </span>
-        </header>
+        {view !== 'Monitoring' && (
+          <header className="workspace-header">
+            <strong>{view}</strong>
+            <span className="local-badge">
+              <span className="hint-dot" />
+              {safeMode ? 'SAFE MODE' : isDesktop ? 'ON YOUR DEVICE' : 'BROWSER PREVIEW'}
+            </span>
+          </header>
+        )}
         <div id="main-content" tabIndex={-1}>
           {view === 'Monitoring' ? (
             <Suspense
