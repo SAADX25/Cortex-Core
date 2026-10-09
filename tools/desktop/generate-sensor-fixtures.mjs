@@ -61,4 +61,7 @@ save('absent', () => [
   node('CPU with no temperature', [], { HardwareId: '/intelcpu/0' }),
   node('RAM with no temperature', [], { HardwareId: '/ram' }),
 ]);
-writeFileSync(`${directory}/malformed.json`, '{"Version":"0.9.6","Children":"not-an-array"}\n');
+writeFileSync(
+  `${directory}/malformed.json`,
+  '{ "Version": "0.9.6", "Children": "not-an-array" }\n',
+);

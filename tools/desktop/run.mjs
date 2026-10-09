@@ -1,8 +1,12 @@
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { resolve, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../../', import.meta.url));
+const webDist = resolve(root, 'apps/web/dist');
+if (!existsSync(webDist)) {
+  mkdirSync(webDist, { recursive: true });
+}
 const mode = process.argv[2];
 const env = { ...process.env };
 // Keep local Rust builds within modest-memory Windows machines; callers may opt into more jobs.

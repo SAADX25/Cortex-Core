@@ -72,6 +72,12 @@ importers:
       '@cortex/application-ui':
         specifier: workspace:*
         version: link:../../packages/application-ui
+      react:
+        specifier: 19.3.0
+        version: 19.3.0
+      react-dom:
+        specifier: 19.3.0
+        version: 19.3.0(react@19.3.0)
     devDependencies:
       '@types/react':
         specifier: 19.3.0
