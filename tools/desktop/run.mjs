@@ -20,6 +20,9 @@ if (existsSync(resolve(local, process.platform === 'win32' ? 'cargo.exe' : 'carg
   env.PATH = local + delimiter + env.PATH;
 }
 const cwd = resolve(root, 'apps/desktop');
+if (mode === 'safe-mode-build') {
+  env.CARGO_TARGET_DIR = resolve(root, '.artifacts/safe-mode-build');
+}
 let execution;
 if (mode.startsWith('rust-')) {
   const args =
@@ -32,9 +35,21 @@ if (mode.startsWith('rust-')) {
 } else {
   const cli = resolve(cwd, 'node_modules/@tauri-apps/cli/tauri.js');
   const cliArgs =
-    mode === 'safety-build'
-      ? ['build', '--debug', '--no-bundle']
-      : [mode, ...process.argv.slice(3)];
+    mode === 'safe-mode-build'
+      ? [
+          'build',
+          '--debug',
+          '--no-bundle',
+          '--features',
+          'custom-protocol,safe-mode',
+          '--',
+          '--no-default-features',
+          '--locked',
+          '--offline',
+        ]
+      : mode === 'safety-build'
+        ? ['build', '--debug', '--no-bundle']
+        : [mode, ...process.argv.slice(3)];
   execution = spawnSync(process.execPath, [cli, ...cliArgs], {
     cwd,
     env,

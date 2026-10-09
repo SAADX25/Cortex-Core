@@ -59,7 +59,7 @@ fn record(event: &str, details: Value) {
 pub fn init<R: Runtime>() -> TauriPlugin<R> {
     record(
         "trace-enabled",
-        json!({"monitoring": "absent", "stderrWriteErrors": "ignored"}),
+        json!({"runtimePolicy": crate::safe_mode::policy(), "stderrWriteErrors": "ignored"}),
     );
     let prior = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {

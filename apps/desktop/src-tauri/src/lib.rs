@@ -2,8 +2,18 @@ mod build;
 mod catalog;
 #[cfg(debug_assertions)]
 mod exit_diagnostics;
+#[cfg(all(not(feature = "safe-mode"), feature = "hardware-discovery"))]
 mod external_sensors;
+#[cfg(any(feature = "safe-mode", not(feature = "hardware-discovery")))]
+#[path = "external_sensors_disabled.rs"]
+mod external_sensors;
+#[cfg(all(not(feature = "safe-mode"), feature = "hardware-discovery"))]
 mod hardware;
+#[cfg(any(feature = "safe-mode", not(feature = "hardware-discovery")))]
+#[path = "hardware_disabled.rs"]
+mod hardware;
+mod hardware_types;
+mod safe_mode;
 use serde::Serialize;
 use std::{fs, io::Write, path::PathBuf, sync::Mutex};
 use tauri::Manager;
@@ -11,9 +21,15 @@ use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
 #[tauri::command]
+fn get_runtime_policy() -> safe_mode::Policy {
+    safe_mode::policy()
+}
+
+#[tauri::command]
 fn open_external_sensor_session(
     state: tauri::State<'_, std::sync::Arc<external_sensors::Adapter>>,
 ) -> Result<u64, String> {
+    safe_mode::require_access()?;
     state.open_session()
 }
 #[tauri::command]
@@ -23,6 +39,9 @@ fn configure_external_sensors(
     revision: Option<u64>,
     state: tauri::State<'_, std::sync::Arc<external_sensors::Adapter>>,
 ) -> Result<u64, String> {
+    if consent {
+        safe_mode::require_access()?;
+    }
     match (owner, revision) {
         (Some(owner), Some(revision)) => state.configure_owned(owner, revision, consent),
         (None, None) => state.configure(consent),
@@ -34,6 +53,7 @@ async fn read_external_sensors(
     session: u64,
     state: tauri::State<'_, std::sync::Arc<external_sensors::Adapter>>,
 ) -> Result<external_sensors::Snapshot, String> {
+    safe_mode::require_access()?;
     let Some(ticket) = state.inner().ticket(session)? else {
         return Ok(state.snapshot(session));
     };
@@ -56,6 +76,7 @@ struct DesktopState {
 async fn load_hardware_scan(
     state: tauri::State<'_, DesktopState>,
 ) -> Result<Option<hardware::Hardware>, String> {
+    safe_mode::require_access()?;
     let path = state.hardware_path.clone();
     tauri::async_runtime::spawn_blocking(move || {
         let db = rusqlite::Connection::open(path).map_err(|_| "Hardware cache unavailable")?;
@@ -68,6 +89,7 @@ async fn load_hardware_scan(
 async fn scan_hardware(
     state: tauri::State<'_, DesktopState>,
 ) -> Result<hardware::Hardware, String> {
+    safe_mode::require_access()?;
     let path = state.hardware_path.clone();
     let lock = state.hardware_lock.clone();
     let log = state.log_dir.join("hardware-support.log");
@@ -344,6 +366,7 @@ pub fn run() {
             }
         })
         .invoke_handler(tauri::generate_handler![
+            get_runtime_policy,
             scan_hardware,
             load_hardware_scan,
             load_catalog_snapshot,

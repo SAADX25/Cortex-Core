@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { invoke } from '@tauri-apps/api/core';
 import { isDesktop, openDocumentation } from './platform';
+import { guardSensorBridge, runtimePolicy, useRuntimePolicy } from './runtime-policy';
 import {
   sensorCategories,
   sensorValue,
@@ -104,6 +105,8 @@ function HistoryChart({
 }
 
 export default function Monitoring() {
+  const policy = useRuntimePolicy();
+  const sensorsAllowed = isDesktop && policy?.thermalSensors === true;
   const [snapshot, setSnapshot] = useState(() => unavailableSensors('disabled'));
   const [consent, setConsent] = useState(false);
   const [phase, setPhase] = useState<Phase>('disconnected');
@@ -121,12 +124,15 @@ export default function Monitoring() {
     let alive = true;
     const sessionHistory = history.current;
     const instance = new SensorPoller(
-      {
-        open: () => invoke<number>('open_external_sensor_session'),
-        configure: (consent, owner, revision) =>
-          invoke<number>('configure_external_sensors', { consent, owner, revision }),
-        read: (session) => invoke<unknown>('read_external_sensors', { session }),
-      },
+      guardSensorBridge(
+        {
+          open: () => invoke<number>('open_external_sensor_session'),
+          configure: (consent, owner, revision) =>
+            invoke<number>('configure_external_sensors', { consent, owner, revision }),
+          read: (session) => invoke<unknown>('read_external_sensors', { session }),
+        },
+        runtimePolicy,
+      ),
       {
         after: (callback, ms) => window.setTimeout(callback, ms),
         cancel: (timer) => window.clearTimeout(timer as number),
@@ -234,17 +240,21 @@ export default function Monitoring() {
         <div>
           <h2>LibreHardwareMonitor</h2>
           <p role="status">
-            {!isDesktop
-              ? 'Desktop required. Not available in browser preview.'
-              : phase === 'disconnected'
-                ? 'Disconnected. No sensor requests.'
-                : phase === 'error'
-                  ? snapshot.status
-                  : phase === 'connecting'
-                    ? 'Waiting for local source…'
-                    : fresh
-                      ? 'Local source connected.'
-                      : 'Reading stale. Not available.'}
+            {policy?.mode === 'safe'
+              ? 'Safe Mode. All temperature sources disabled. Not available.'
+              : !policy && isDesktop
+                ? 'Native safety policy unavailable. Temperature sources disabled.'
+                : !isDesktop
+                  ? 'Desktop required. Not available in browser preview.'
+                  : phase === 'disconnected'
+                    ? 'Disconnected. No sensor requests.'
+                    : phase === 'error'
+                      ? snapshot.status
+                      : phase === 'connecting'
+                        ? 'Waiting for local source…'
+                        : fresh
+                          ? 'Local source connected.'
+                          : 'Reading stale. Not available.'}
           </p>
           <small>
             Last successful observation:{' '}
@@ -307,7 +317,7 @@ export default function Monitoring() {
           <input
             type="checkbox"
             checked={consent}
-            disabled={!isDesktop || active}
+            disabled={!sensorsAllowed || active}
             onChange={(event) => setConsent(event.target.checked)}
           />
           I completed setup on a separately validated PC and consent to local, read-only temperature
@@ -315,7 +325,7 @@ export default function Monitoring() {
         </label>
         <button
           className="button primary"
-          disabled={!isDesktop || !consent || active || document.hidden}
+          disabled={!sensorsAllowed || !consent || active || document.hidden}
           onClick={() => {
             history.current.clear();
             setLastObservation(null);

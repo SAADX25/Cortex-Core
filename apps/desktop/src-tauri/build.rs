@@ -1,6 +1,7 @@
 fn main() {
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
+            "get_runtime_policy",
             "scan_hardware",
             "load_hardware_scan",
             "load_catalog_snapshot",

@@ -1,31 +1,10 @@
 //! Local, allowlisted hardware discovery. Raw provider records never cross IPC or enter the cache.
-use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::BTreeMap;
 
 type Row = BTreeMap<String, Value>;
 const UNKNOWN: &str = "Unknown";
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct Device {
-    pub name: String,
-    pub properties: BTreeMap<String, String>,
-}
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct Hardware {
-    pub schema_version: u32,
-    pub scanned_at: u64,
-    pub cpu: Vec<Device>,
-    pub gpu: Vec<Device>,
-    pub motherboard: Vec<Device>,
-    pub memory: Vec<Device>,
-    pub total_memory_bytes: Option<u64>,
-    pub storage: Vec<Device>,
-    pub bios: Vec<Device>,
-    pub os: Vec<Device>,
-    pub unavailable: Vec<String>,
-}
+pub use crate::hardware_types::{Device, Hardware};
 #[derive(Default)]
 struct Raw {
     cpu: Vec<Row>,
