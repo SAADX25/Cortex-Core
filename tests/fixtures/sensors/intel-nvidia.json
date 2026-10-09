@@ -1,0 +1,326 @@
+{
+  "id": 27,
+  "Text": "Sensor",
+  "Min": "Min",
+  "Value": "Value",
+  "Max": "Max",
+  "ImageURL": "",
+  "Children": [
+    {
+      "id": 26,
+      "Text": "Mock computer",
+      "Min": "",
+      "Value": "",
+      "Max": "",
+      "ImageURL": "",
+      "Children": [
+        {
+          "id": 2,
+          "Text": "Intel Core i7 (synthetic)",
+          "Min": "",
+          "Value": "",
+          "Max": "",
+          "ImageURL": "",
+          "Children": [
+            {
+              "id": 1,
+              "Text": "Temperatures",
+              "Min": "",
+              "Value": "",
+              "Max": "",
+              "ImageURL": "",
+              "Children": [
+                {
+                  "id": 0,
+                  "Text": "CPU Package",
+                  "Min": "",
+                  "Value": "45,5 °C",
+                  "Max": "",
+                  "ImageURL": "",
+                  "Children": [],
+                  "SensorId": "/intelcpu/0/temperature/0",
+                  "Type": "Temperature",
+                  "RawValue": "45,5 °C",
+                  "RawMin": "",
+                  "RawMax": ""
+                }
+              ]
+            }
+          ],
+          "HardwareId": "/intelcpu/0"
+        },
+        {
+          "id": 5,
+          "Text": "NVIDIA GeForce (synthetic)",
+          "Min": "",
+          "Value": "",
+          "Max": "",
+          "ImageURL": "",
+          "Children": [
+            {
+              "id": 4,
+              "Text": "Temperatures",
+              "Min": "",
+              "Value": "",
+              "Max": "",
+              "ImageURL": "",
+              "Children": [
+                {
+                  "id": 3,
+                  "Text": "GPU Core",
+                  "Min": "",
+                  "Value": "48 °C",
+                  "Max": "",
+                  "ImageURL": "",
+                  "Children": [],
+                  "SensorId": "/gpu-nvidia/0/temperature/0",
+                  "Type": "Temperature",
+                  "RawValue": "48 °C",
+                  "RawMin": "",
+                  "RawMax": ""
+                }
+              ]
+            }
+          ],
+          "HardwareId": "/gpu-nvidia/0"
+        },
+        {
+          "id": 8,
+          "Text": "Intel integrated graphics (synthetic)",
+          "Min": "",
+          "Value": "",
+          "Max": "",
+          "ImageURL": "",
+          "Children": [
+            {
+              "id": 7,
+              "Text": "Temperatures",
+              "Min": "",
+              "Value": "",
+              "Max": "",
+              "ImageURL": "",
+              "Children": [
+                {
+                  "id": 6,
+                  "Text": "GPU Core",
+                  "Min": "",
+                  "Value": "40 °C",
+                  "Max": "",
+                  "ImageURL": "",
+                  "Children": [],
+                  "SensorId": "/gpu-intel/0/temperature/0",
+                  "Type": "Temperature",
+                  "RawValue": "40 °C",
+                  "RawMin": "",
+                  "RawMax": ""
+                }
+              ]
+            }
+          ],
+          "HardwareId": "/gpu-intel/0"
+        },
+        {
+          "id": 12,
+          "Text": "ASUS motherboard (synthetic)",
+          "Min": "",
+          "Value": "",
+          "Max": "",
+          "ImageURL": "",
+          "Children": [
+            {
+              "id": 11,
+              "Text": "Mock sensor chip",
+              "Min": "",
+              "Value": "",
+              "Max": "",
+              "ImageURL": "",
+              "Children": [
+                {
+                  "id": 10,
+                  "Text": "Temperatures",
+                  "Min": "",
+                  "Value": "",
+                  "Max": "",
+                  "ImageURL": "",
+                  "Children": [
+                    {
+                      "id": 9,
+                      "Text": "System",
+                      "Min": "",
+                      "Value": "33 °C",
+                      "Max": "",
+                      "ImageURL": "",
+                      "Children": [],
+                      "SensorId": "/lpc/nct6798d/0/temperature/0",
+                      "Type": "Temperature",
+                      "RawValue": "33 °C",
+                      "RawMin": "",
+                      "RawMax": ""
+                    }
+                  ]
+                }
+              ],
+              "HardwareId": "/lpc/nct6798d/0"
+            }
+          ],
+          "HardwareId": "/motherboard"
+        },
+        {
+          "id": 15,
+          "Text": "Samsung NVMe (synthetic)",
+          "Min": "",
+          "Value": "",
+          "Max": "",
+          "ImageURL": "",
+          "Children": [
+            {
+              "id": 14,
+              "Text": "Temperatures",
+              "Min": "",
+              "Value": "",
+              "Max": "",
+              "ImageURL": "",
+              "Children": [
+                {
+                  "id": 13,
+                  "Text": "Composite",
+                  "Min": "",
+                  "Value": "37 °C",
+                  "Max": "",
+                  "ImageURL": "",
+                  "Children": [],
+                  "SensorId": "/nvme/0/temperature/0",
+                  "Type": "Temperature",
+                  "RawValue": "37 °C",
+                  "RawMin": "",
+                  "RawMax": ""
+                }
+              ]
+            }
+          ],
+          "HardwareId": "/nvme/0"
+        },
+        {
+          "id": 18,
+          "Text": "WD SATA SSD (synthetic)",
+          "Min": "",
+          "Value": "",
+          "Max": "",
+          "ImageURL": "",
+          "Children": [
+            {
+              "id": 17,
+              "Text": "Temperatures",
+              "Min": "",
+              "Value": "",
+              "Max": "",
+              "ImageURL": "",
+              "Children": [
+                {
+                  "id": 16,
+                  "Text": "Temperature",
+                  "Min": "",
+                  "Value": "31 °C",
+                  "Max": "",
+                  "ImageURL": "",
+                  "Children": [],
+                  "SensorId": "/ssd/0/temperature/0",
+                  "Type": "Temperature",
+                  "RawValue": "31 °C",
+                  "RawMin": "",
+                  "RawMax": ""
+                }
+              ]
+            }
+          ],
+          "HardwareId": "/ssd/0"
+        },
+        {
+          "id": 21,
+          "Text": "Seagate HDD (synthetic)",
+          "Min": "",
+          "Value": "",
+          "Max": "",
+          "ImageURL": "",
+          "Children": [
+            {
+              "id": 20,
+              "Text": "Temperatures",
+              "Min": "",
+              "Value": "",
+              "Max": "",
+              "ImageURL": "",
+              "Children": [
+                {
+                  "id": 19,
+                  "Text": "Temperature",
+                  "Min": "",
+                  "Value": "30 °C",
+                  "Max": "",
+                  "ImageURL": "",
+                  "Children": [],
+                  "SensorId": "/hdd/0/temperature/0",
+                  "Type": "Temperature",
+                  "RawValue": "30 °C",
+                  "RawMin": "",
+                  "RawMax": ""
+                }
+              ]
+            }
+          ],
+          "HardwareId": "/hdd/0"
+        },
+        {
+          "id": 25,
+          "Text": "DDR5 DIMM (synthetic)",
+          "Min": "",
+          "Value": "",
+          "Max": "",
+          "ImageURL": "",
+          "Children": [
+            {
+              "id": 24,
+              "Text": "Temperatures",
+              "Min": "",
+              "Value": "",
+              "Max": "",
+              "ImageURL": "",
+              "Children": [
+                {
+                  "id": 22,
+                  "Text": "Module",
+                  "Min": "",
+                  "Value": "35 °C",
+                  "Max": "",
+                  "ImageURL": "",
+                  "Children": [],
+                  "SensorId": "/memory/dimm/0/temperature/0",
+                  "Type": "Temperature",
+                  "RawValue": "35 °C",
+                  "RawMin": "",
+                  "RawMax": ""
+                },
+                {
+                  "id": 23,
+                  "Text": "Thermal Sensor High Limit",
+                  "Min": "",
+                  "Value": "85 °C",
+                  "Max": "",
+                  "ImageURL": "",
+                  "Children": [],
+                  "SensorId": "/memory/dimm/0/temperature/1",
+                  "Type": "Temperature",
+                  "RawValue": "85 °C",
+                  "RawMin": "",
+                  "RawMax": ""
+                }
+              ]
+            }
+          ],
+          "HardwareId": "/memory/dimm/0"
+        }
+      ]
+    }
+  ],
+  "Version": "0.9.6"
+}

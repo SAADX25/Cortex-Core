@@ -1,5 +1,7 @@
 # Update 11 — Monitoring quarantined; Update-10 runtime restored
 
+> Historical incident and baseline-build record. The later [external temperature adapter](external-temperature-sources.md) adds dormant, consented HTTP monitoring and a new UI while keeping these legacy providers quarantined. Its source tree is no longer byte-identical to Update-10. The earlier no-Monitoring-code executable claims below apply only to their recorded artifacts. No live source or hardware probing was enabled during the later work.
+
 **Safety status, 9 October 2026:** the user reported three full-system freezes during Monitoring development, each requiring forced power-off. All live sensor testing on this machine has stopped. The safety isolation is committed as **15d75c2f7331b10af946df185147e25e03eea444 (Update-11)**, verified locally and against GitHub `origin/main` with `git ls-remote`. The commit includes the dormant controller and quarantine safeguards; it does not establish runtime stability or repair the Monitoring fault. The original Windows development executable contained no Monitoring code. Normal desktop smoke and 17 native regression tests passed, but an idle observation found the process exited after approximately 92.5 seconds, and the user confirmed an unsolicited exit. That exit is under investigation. No installer or release build was created. Neither issue is called fixed.
 
 ## Ordinary application behavior

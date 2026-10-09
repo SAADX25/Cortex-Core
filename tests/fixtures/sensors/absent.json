@@ -1,0 +1,41 @@
+{
+  "id": 3,
+  "Text": "Sensor",
+  "Min": "Min",
+  "Value": "Value",
+  "Max": "Max",
+  "ImageURL": "",
+  "Children": [
+    {
+      "id": 2,
+      "Text": "Mock computer",
+      "Min": "",
+      "Value": "",
+      "Max": "",
+      "ImageURL": "",
+      "Children": [
+        {
+          "id": 0,
+          "Text": "CPU with no temperature",
+          "Min": "",
+          "Value": "",
+          "Max": "",
+          "ImageURL": "",
+          "Children": [],
+          "HardwareId": "/intelcpu/0"
+        },
+        {
+          "id": 1,
+          "Text": "RAM with no temperature",
+          "Min": "",
+          "Value": "",
+          "Max": "",
+          "ImageURL": "",
+          "Children": [],
+          "HardwareId": "/ram"
+        }
+      ]
+    }
+  ],
+  "Version": "0.9.6"
+}

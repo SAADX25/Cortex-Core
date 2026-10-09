@@ -36,6 +36,7 @@
     "test:desktop": "node tools/desktop/smoke.mjs",
     "test:monitoring:desktop": "node tools/desktop/monitoring-smoke.mjs",
     "test:monitoring:safe": "node tools/desktop/test-monitoring-safe.mjs",
+    "test:sensors:mock": "node tools/desktop/test-external-sensors.mjs",
     "desktop:package": "pnpm desktop:build && node tools/desktop/package-release.mjs"
   },
   "dependencies": {

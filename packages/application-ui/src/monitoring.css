@@ -1,0 +1,47 @@
+.sensor-setup,
+.sensor-card {
+  border: 1px solid var(--border, #303949);
+  border-radius: 12px;
+  padding: 24px;
+  background: var(--panel, #141b26);
+}
+.sensor-setup {
+  margin-bottom: 24px;
+  line-height: 1.65;
+}
+.sensor-setup h2,
+.sensor-card h2 {
+  margin-top: 0;
+}
+.sensor-consent {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  margin: 20px 0;
+}
+.sensor-consent input {
+  margin-top: 6px;
+}
+.sensor-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr));
+  gap: 20px;
+  margin-top: 24px;
+}
+.sensor-row {
+  display: grid;
+  gap: 7px;
+  padding: 16px 0;
+  border-top: 1px solid var(--border, #303949);
+}
+.sensor-row b {
+  font-size: 1.5rem;
+}
+.sensor-row code,
+.sensor-setup code {
+  overflow-wrap: anywhere;
+  font-size: 0.8rem;
+}
+.sensor-row small {
+  color: var(--muted, #a4b0c2);
+}

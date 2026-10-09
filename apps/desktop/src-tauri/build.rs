@@ -10,6 +10,8 @@ fn main() {
             "open_documentation",
             "load_development_build",
             "save_development_build",
+            "configure_external_sensors",
+            "read_external_sensors",
         ]),
     ))
     .expect("Tauri build configuration is invalid");

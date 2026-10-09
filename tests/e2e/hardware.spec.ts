@@ -26,7 +26,7 @@ async function mockScanner(page: Page, partial = false, scan = hardwareFixture) 
     { scan, partial },
   );
 }
-test('automatic scan, six cards, only three routes, real details and rescan', async ({ page }) => {
+test('automatic scan, six cards, four routes, real details and rescan', async ({ page }) => {
   await mockScanner(page);
   const errors: string[] = [];
   const assets: string[] = [];
@@ -38,7 +38,7 @@ test('automatic scan, six cards, only three routes, real details and rescan', as
   expect(assets.some((u) => /renderer\.tsx|three\.module|react-three_fiber/.test(u))).toBe(false);
   await expect(
     page.getByRole('navigation', { name: 'Primary navigation' }).getByRole('link'),
-  ).toHaveCount(3);
+  ).toHaveCount(4);
   await expect(
     page.getByRole('button', {
       name: /^(CPU|GPU|Memory|Motherboard|Storage|Operating System) details$/,

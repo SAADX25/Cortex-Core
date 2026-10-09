@@ -1,0 +1,91 @@
+{
+  "id": 7,
+  "Text": "Sensor",
+  "Min": "Min",
+  "Value": "Value",
+  "Max": "Max",
+  "ImageURL": "",
+  "Children": [
+    {
+      "id": 6,
+      "Text": "Mock computer",
+      "Min": "",
+      "Value": "",
+      "Max": "",
+      "ImageURL": "",
+      "Children": [
+        {
+          "id": 2,
+          "Text": "Identical SSD name (synthetic)",
+          "Min": "",
+          "Value": "",
+          "Max": "",
+          "ImageURL": "",
+          "Children": [
+            {
+              "id": 1,
+              "Text": "Temperatures",
+              "Min": "",
+              "Value": "",
+              "Max": "",
+              "ImageURL": "",
+              "Children": [
+                {
+                  "id": 0,
+                  "Text": "Composite",
+                  "Min": "",
+                  "Value": "36 °C",
+                  "Max": "",
+                  "ImageURL": "",
+                  "Children": [],
+                  "SensorId": "/nvme/0/temperature/0",
+                  "Type": "Temperature",
+                  "RawValue": "36 °C",
+                  "RawMin": "",
+                  "RawMax": ""
+                }
+              ]
+            }
+          ],
+          "HardwareId": "/nvme/0"
+        },
+        {
+          "id": 5,
+          "Text": "Identical SSD name (synthetic)",
+          "Min": "",
+          "Value": "",
+          "Max": "",
+          "ImageURL": "",
+          "Children": [
+            {
+              "id": 4,
+              "Text": "Temperatures",
+              "Min": "",
+              "Value": "",
+              "Max": "",
+              "ImageURL": "",
+              "Children": [
+                {
+                  "id": 3,
+                  "Text": "Composite",
+                  "Min": "",
+                  "Value": "38 °C",
+                  "Max": "",
+                  "ImageURL": "",
+                  "Children": [],
+                  "SensorId": "/nvme/1/temperature/0",
+                  "Type": "Temperature",
+                  "RawValue": "38 °C",
+                  "RawMin": "",
+                  "RawMax": ""
+                }
+              ]
+            }
+          ],
+          "HardwareId": "/nvme/1"
+        }
+      ]
+    }
+  ],
+  "Version": "0.9.6"
+}

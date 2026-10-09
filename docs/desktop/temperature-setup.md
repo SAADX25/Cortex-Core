@@ -1,0 +1,14 @@
+# Temperature monitoring setup
+
+Cortex's external adapter is experimental and has only been tested with mock data. Use a separate, independently validated PC. Do not enable it on the development PC affected by the three system freezes.
+
+1. Obtain LibreHardwareMonitor yourself from its [official release page](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases). Review that release's system, license and driver requirements. Cortex never installs, starts, configures or elevates it.
+2. The adapter understands the reviewed 0.9.5/0.9.6 JSON contract and reads only `http://127.0.0.1:8085/data.json`. Other versions, hosts, ports and endpoints are unsupported. Cortex accepts no URL or hostname input.
+3. The external server must have verifiable local-only access. Leave remote access disabled and do not open firewall ports. Do not follow the firewall/remote-host steps in the [Home Assistant integration guide](https://www.home-assistant.io/integrations/libre_hardware_monitor); that guide is a reference for the external-provider model, not Cortex's network policy.
+4. Open **Monitoring**, read the consent statement, check it and click **Connect local source**. Consent lasts for the current session only. Merely opening Monitoring sends no sensor requests.
+5. If Cortex cannot verify local-only access, it refuses before sending GET. Wildcard bindings, LAN bindings and shared Windows HTTP.sys listeners are refused. **Official LHM Windows builds commonly use these listeners, so there is currently no guaranteed stock-build configuration that passes.** A loopback URL or a firewall block alone does not prove server isolation. Leave the source disconnected if this happens; there is no supported workaround in Cortex.
+6. When connected on a separately validated supported setup, values are grouped by LHM's own hardware IDs. They are not assigned to exact My PC devices by name. CPU, GPU, motherboard, storage and RAM temperatures appear only where sensors actually exist.
+7. **Not available** means the value is missing, stale, ambiguous or unsupported. It never means zero degrees. Measurement time is not supplied by the JSON endpoint; the displayed time is when Cortex received the data.
+8. Click **Disconnect** to clear data and revoke consent. Leaving Monitoring, hiding the app or closing it also stops polling. Explicitly reconnect to resume. External application shutdown clears readings; retries remain bounded while a consented session is visible and active.
+
+The research, licenses, architecture, refusal limitations and future-helper evaluation are in [External temperature sources](external-temperature-sources.md). These changes do not claim universal sensor support, freeze prevention or production-ready live monitoring.

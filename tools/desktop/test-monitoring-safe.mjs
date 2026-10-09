@@ -6,17 +6,11 @@ import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { resolve, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { verifyUpdate10Integration } from './safety-artifact.mjs';
+import { verifyExternalSensorIsolation } from './verify-external-sensor-isolation.mjs';
 const root = fileURLToPath(new URL('../../', import.meta.url));
-const baseline = [
-  'apps/desktop/src-tauri/src/lib.rs',
-  'apps/desktop/src-tauri/build.rs',
-  'apps/desktop/src-tauri/capabilities/main.json',
-  'packages/application-ui/src/App.tsx',
-  'packages/application-ui/src/icons.tsx',
-  'tests/e2e/hardware.spec.ts',
-  'tools/desktop/smoke.mjs',
-];
+const baseline = ['packages/application-ui/src/icons.tsx', 'tools/desktop/smoke.mjs'];
 for (const file of baseline) verifyUpdate10Integration(file, root);
+verifyExternalSensorIsolation(root);
 const cargo = readFileSync(resolve(root, 'apps/desktop/src-tauri/Cargo.toml'), 'utf8');
 assert(!cargo.includes('experimental-live-sensors'));
 assert(cargo.includes('required-features = ["monitoring-diagnostics"]'));
@@ -92,5 +86,5 @@ const releaseAttempt = run(
 );
 assert(releaseAttempt.stderr.includes('Monitoring diagnostics may not be built for release'));
 console.log(
-  'PASS: Update-10 integration preserved; mock-only isolation checks completed; no live adapter available.',
+  'PASS: Legacy providers remain quarantined; dormant external HTTP adapter isolated; mock-only controller checks completed.',
 );

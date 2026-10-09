@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-configure-external-sensors"
+description = "Enables the configure_external_sensors command without any pre-configured scope."
+commands.allow = ["configure_external_sensors"]
+
+[[permission]]
+identifier = "deny-configure-external-sensors"
+description = "Denies the configure_external_sensors command without any pre-configured scope."
+commands.deny = ["configure_external_sensors"]

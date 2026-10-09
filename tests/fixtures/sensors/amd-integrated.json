@@ -1,0 +1,137 @@
+{
+  "id": 11,
+  "Text": "Sensor",
+  "Min": "Min",
+  "Value": "Value",
+  "Max": "Max",
+  "ImageURL": "",
+  "Children": [
+    {
+      "id": 10,
+      "Text": "Mock computer",
+      "Min": "",
+      "Value": "",
+      "Max": "",
+      "ImageURL": "",
+      "Children": [
+        {
+          "id": 2,
+          "Text": "AMD Ryzen (synthetic)",
+          "Min": "",
+          "Value": "",
+          "Max": "",
+          "ImageURL": "",
+          "Children": [
+            {
+              "id": 1,
+              "Text": "Temperatures",
+              "Min": "",
+              "Value": "",
+              "Max": "",
+              "ImageURL": "",
+              "Children": [
+                {
+                  "id": 0,
+                  "Text": "CPU (Tctl/Tdie)",
+                  "Min": "",
+                  "Value": "122 °F",
+                  "Max": "",
+                  "ImageURL": "",
+                  "Children": [],
+                  "SensorId": "/amdcpu/0/temperature/0",
+                  "Type": "Temperature",
+                  "RawValue": "122 °F",
+                  "RawMin": "",
+                  "RawMax": ""
+                }
+              ]
+            }
+          ],
+          "HardwareId": "/amdcpu/0"
+        },
+        {
+          "id": 5,
+          "Text": "AMD Radeon integrated (synthetic)",
+          "Min": "",
+          "Value": "",
+          "Max": "",
+          "ImageURL": "",
+          "Children": [
+            {
+              "id": 4,
+              "Text": "Temperatures",
+              "Min": "",
+              "Value": "",
+              "Max": "",
+              "ImageURL": "",
+              "Children": [
+                {
+                  "id": 3,
+                  "Text": "GPU Core",
+                  "Min": "",
+                  "Value": "44 °C",
+                  "Max": "",
+                  "ImageURL": "",
+                  "Children": [],
+                  "SensorId": "/gpu-amd/0/temperature/0",
+                  "Type": "Temperature",
+                  "RawValue": "44 °C",
+                  "RawMin": "",
+                  "RawMax": ""
+                }
+              ]
+            }
+          ],
+          "HardwareId": "/gpu-amd/0"
+        },
+        {
+          "id": 9,
+          "Text": "MSI motherboard (synthetic)",
+          "Min": "",
+          "Value": "",
+          "Max": "",
+          "ImageURL": "",
+          "Children": [
+            {
+              "id": 8,
+              "Text": "Mock sensor chip",
+              "Min": "",
+              "Value": "",
+              "Max": "",
+              "ImageURL": "",
+              "Children": [
+                {
+                  "id": 7,
+                  "Text": "Temperatures",
+                  "Min": "",
+                  "Value": "",
+                  "Max": "",
+                  "ImageURL": "",
+                  "Children": [
+                    {
+                      "id": 6,
+                      "Text": "System",
+                      "Min": "",
+                      "Value": "33 °C",
+                      "Max": "",
+                      "ImageURL": "",
+                      "Children": [],
+                      "SensorId": "/lpc/it8688e/0/temperature/0",
+                      "Type": "Temperature",
+                      "RawValue": "33 °C",
+                      "RawMin": "",
+                      "RawMax": ""
+                    }
+                  ]
+                }
+              ],
+              "HardwareId": "/lpc/it8688e/0"
+            }
+          ],
+          "HardwareId": "/motherboard"
+        }
+      ]
+    }
+  ],
+  "Version": "0.9.6"
+}

@@ -2,12 +2,34 @@ mod build;
 mod catalog;
 #[cfg(debug_assertions)]
 mod exit_diagnostics;
+mod external_sensors;
 mod hardware;
 use serde::Serialize;
 use std::{fs, io::Write, path::PathBuf, sync::Mutex};
 use tauri::Manager;
 use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
+
+#[tauri::command]
+fn configure_external_sensors(
+    consent: bool,
+    state: tauri::State<'_, std::sync::Arc<external_sensors::Adapter>>,
+) -> Result<u64, String> {
+    state.configure(consent)
+}
+#[tauri::command]
+async fn read_external_sensors(
+    session: u64,
+    state: tauri::State<'_, std::sync::Arc<external_sensors::Adapter>>,
+) -> Result<external_sensors::Snapshot, String> {
+    if !state.begin(session)? {
+        return Ok(state.snapshot(session));
+    }
+    let adapter = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || adapter.complete(session))
+        .await
+        .map_err(|_| "Sensor worker unavailable".into())
+}
 
 struct DesktopState {
     hardware_path: PathBuf,
@@ -188,6 +210,7 @@ fn open_documentation(key: &str, app: tauri::AppHandle) -> Result<(), String> {
     let url = match key {
         "tauri" => "https://v2.tauri.app/",
         "hardware-sources" => "https://www.khronos.org/gltf/",
+        "sensor-source" => "https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases",
         _ => return Err("Unrecognized documentation key".into()),
     };
     app.opener()
@@ -211,6 +234,8 @@ pub fn run() {
         )
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
+            // Dormant state only: no networking inventory, HTTP or sensor access at startup.
+            app.manage(std::sync::Arc::new(external_sensors::Adapter::default()));
             let config = app.path().app_config_dir()?;
             let data = app.path().app_local_data_dir()?.join("catalog");
             let cache = app.path().app_cache_dir()?;
@@ -283,6 +308,12 @@ pub fn run() {
         })
         .on_window_event(move |window, event| {
             if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                if let Some(adapter) = window
+                    .app_handle()
+                    .try_state::<std::sync::Arc<external_sensors::Adapter>>()
+                {
+                    let _ = adapter.configure(false);
+                }
                 // Persist normal/maximized geometry, never an accidental fullscreen launch state.
                 let _ = window.set_fullscreen(false);
                 let _ = window.app_handle().save_window_state(flags);
@@ -297,7 +328,9 @@ pub fn run() {
             record_graphics_failure,
             open_documentation,
             load_development_build,
-            save_development_build
+            save_development_build,
+            configure_external_sensors,
+            read_external_sensors
         ])
         .run(tauri::generate_context!())
         .expect("Cortex Core desktop runtime could not start");

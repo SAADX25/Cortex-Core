@@ -14,6 +14,7 @@ import {
 import HardwareInspector from './HardwareInspector';
 import { version } from '../../../package.json';
 const DetectedViewer = lazy(() => import('./viewer/DetectedViewer'));
+const Monitoring = lazy(() => import('./Monitoring'));
 const icons: Record<HardwareCategory, IconName> = {
   cpu: 'chip',
   gpu: 'layers',
@@ -38,7 +39,14 @@ export default function App() {
     window.addEventListener('hashchange', update);
     return () => window.removeEventListener('hashchange', update);
   }, []);
-  const view = route === '/3d' ? '3D View' : route === '/settings' ? 'Settings' : 'My PC';
+  const view =
+    route === '/monitoring'
+      ? 'Monitoring'
+      : route === '/3d'
+        ? '3D View'
+        : route === '/settings'
+          ? 'Settings'
+          : 'My PC';
   async function copy() {
     if (!scan) return;
     try {
@@ -75,6 +83,10 @@ export default function App() {
             <Icon name="info" size={20} />
             Settings
           </a>
+          <a href="#/monitoring" aria-current={view === 'Monitoring' ? 'page' : undefined}>
+            <Icon name="layers" size={20} />
+            Monitoring
+          </a>
         </nav>
         <div className="rail-note">
           <span className="hint-dot" /> Local by design
@@ -91,7 +103,17 @@ export default function App() {
           </span>
         </header>
         <div id="main-content" tabIndex={-1}>
-          {view === 'Settings' ? (
+          {view === 'Monitoring' ? (
+            <Suspense
+              fallback={
+                <div className="page-loading" role="status">
+                  Opening Monitoring…
+                </div>
+              }
+            >
+              <Monitoring />
+            </Suspense>
+          ) : view === 'Settings' ? (
             <Settings />
           ) : view === '3D View' && scan ? (
             <Suspense

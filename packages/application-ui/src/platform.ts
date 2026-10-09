@@ -34,10 +34,14 @@ export function recordGraphicsFailure(
 ) {
   if (isDesktop) void invoke('record_graphics_failure', { code }).catch(() => undefined);
 }
-export function openDocumentation(key: 'tauri' | 'hardware-sources') {
+export function openDocumentation(key: 'tauri' | 'hardware-sources' | 'sensor-source') {
   if (isDesktop) return invoke<void>('open_documentation', { key });
   window.open(
-    key === 'tauri' ? 'https://v2.tauri.app/' : 'https://www.khronos.org/gltf/',
+    key === 'tauri'
+      ? 'https://v2.tauri.app/'
+      : key === 'sensor-source'
+        ? 'https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases'
+        : 'https://www.khronos.org/gltf/',
     '_blank',
     'noopener,noreferrer',
   );
