@@ -46,18 +46,30 @@ pub struct StorageThermal {
     pub size_gb: Option<u64>,
 }
 
-/// Convert WMI ThermalZone temperature (tenths of Kelvin) to Celsius.
-fn tenths_kelvin_to_celsius(tenths_k: u32) -> Option<f64> {
-    if tenths_k == 0 || tenths_k == 0xFFFFFFFF {
+/// Only accept a physically reported storage temperature where both inventories
+/// identify exactly one drive with the same model name. Never manufacture a value.
+fn unique_storage_temperature(
+    model: &str,
+    disk_models: &[String],
+    smart_temps: &[(String, f64)],
+) -> Option<f64> {
+    let matches_disk = disk_models
+        .iter()
+        .filter(|name| name.trim().eq_ignore_ascii_case(model.trim()))
+        .count();
+    if matches_disk != 1 {
         return None;
     }
-    let celsius = (tenths_k as f64) / 10.0 - 273.15;
-    // Sanity check: -40°C to 200°C
-    if celsius >= -40.0 && celsius <= 200.0 {
-        Some((celsius * 10.0).round() / 10.0)
-    } else {
-        None
-    }
+    let readings: Vec<f64> = smart_temps
+        .iter()
+        .filter(|(name, temp)| {
+            name.trim().eq_ignore_ascii_case(model.trim())
+                && temp.is_finite()
+                && (1.0..=120.0).contains(temp)
+        })
+        .map(|(_, temp)| *temp)
+        .collect();
+    (readings.len() == 1).then(|| readings[0])
 }
 
 #[cfg(all(windows, feature = "hardware-discovery"))]
@@ -86,106 +98,12 @@ pub fn read() -> DirectTemperatures {
         })
         .unwrap_or_else(|| "CPU".to_string());
 
-    // ── 3. Thermal Zones (CIMV2 Perf Counters or ROOT\WMI) ───────────────────
-    let mut thermal_zones: Vec<(String, Option<f64>)> = Vec::new();
-
-    // Query standard CIMV2 PerfFormattedData_Counters_ThermalZoneInformation
-    if let Some(c) = cimv2.as_ref() {
-        if let Ok(rows) = c.raw_query::<Row>(
-            "SELECT Name, HighPrecisionTemperature, Temperature FROM Win32_PerfFormattedData_Counters_ThermalZoneInformation",
-        ) {
-            for row in rows {
-                let name = row
-                    .get("Name")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("ACPI Thermal Zone")
-                    .trim()
-                    .to_string();
-                let celsius = row
-                    .get("HighPrecisionTemperature")
-                    .and_then(|v| v.as_u64())
-                    .and_then(|v| tenths_kelvin_to_celsius(v as u32))
-                    .or_else(|| {
-                        row.get("Temperature")
-                            .and_then(|v| v.as_u64())
-                            .and_then(|v| {
-                                if v > 200 && v < 450 {
-                                    Some(((v as f64 - 273.15) * 10.0).round() / 10.0)
-                                } else {
-                                    None
-                                }
-                            })
-                    });
-                if celsius.is_some() {
-                    thermal_zones.push((name, celsius));
-                }
-            }
-        }
-    }
-
-    // Fallback: ROOT\WMI MSAcpi_ThermalZoneTemperature (if elevated)
-    if thermal_zones.is_empty() {
-        if let Ok(wmi_root) = WMIConnection::with_namespace_path("ROOT\\WMI") {
-            if let Ok(rows) = wmi_root.raw_query::<Row>(
-                "SELECT InstanceName, CurrentTemperature FROM MSAcpi_ThermalZoneTemperature",
-            ) {
-                for row in rows {
-                    let name = row
-                        .get("InstanceName")
-                        .and_then(|v| v.as_str())
-                        .unwrap_or("Thermal Zone")
-                        .trim()
-                        .to_string();
-                    let celsius = row
-                        .get("CurrentTemperature")
-                        .and_then(|v| v.as_u64())
-                        .and_then(|v| tenths_kelvin_to_celsius(v as u32));
-                    if celsius.is_some() {
-                        thermal_zones.push((name, celsius));
-                    }
-                }
-            }
-        }
-    }
-
-    let cpu_load = cimv2
-        .as_ref()
-        .and_then(|c| {
-            c.raw_query::<Row>(
-                "SELECT Name, PercentProcessorTime FROM Win32_PerfFormattedData_PerfOS_Processor",
-            )
-            .ok()
-        })
-        .and_then(|rows| {
-            rows.into_iter()
-                .find(|r| r.get("Name").and_then(|v| v.as_str()) == Some("_Total"))
-                .and_then(|r| r.get("PercentProcessorTime").and_then(|v| v.as_u64()))
-        });
-
-    let primary_acpi_temp = thermal_zones.first().and_then(|(_, c)| *c);
-    let cpu_celsius = primary_acpi_temp.map(|base| {
-        let load = cpu_load.unwrap_or(5) as f64;
-        let delta = if load <= 15.0 {
-            (load * 0.25) + 1.2
-        } else if load <= 50.0 {
-            3.75 + ((load - 15.0) * 0.45)
-        } else {
-            19.5 + ((load - 50.0) * 0.55)
-        };
-        ((base + delta) * 10.0).round() / 10.0
-    });
-
-    let zone_label = match (thermal_zones.first(), cpu_load) {
-        (Some((z, _)), Some(load)) => format!("Zone: {z} · Load: {load}%"),
-        (Some((z, _)), None) => format!("Zone: {z}"),
-        (None, Some(load)) => format!("Load: {load}%"),
-        _ => "ACPI Sensor".to_string(),
-    };
-
+    // ACPI thermal zones do not identify the CPU package. Windows WMI
+    // exposes no portable CPU die temperature, so do not infer one from load.
     result.cpu.push(ThermalReading {
         name: cpu_model,
-        celsius: cpu_celsius,
-        detail: Some(zone_label),
+        celsius: None,
+        detail: Some("CPU package temperature requires a verified hardware sensor".into()),
     });
 
     // ── 4. Motherboard (Win32_BaseBoard) ────────────────────────────────────
@@ -220,23 +138,11 @@ pub fn read() -> DirectTemperatures {
         })
         .unwrap_or_else(|| "Motherboard".to_string());
 
-    // Motherboard: ACPI baseline + VRM and Chipset dissipation from active system power
-    let mobo_celsius = primary_acpi_temp.or(Some(30.0)).map(|base| {
-        let load = cpu_load.unwrap_or(5) as f64;
-        let vrm_delta = if load <= 15.0 {
-            (load * 0.08) + 0.4
-        } else if load <= 50.0 {
-            1.6 + ((load - 15.0) * 0.12)
-        } else {
-            5.8 + ((load - 50.0) * 0.15)
-        };
-        ((base + vrm_delta) * 10.0).round() / 10.0
-    });
-
+    // Neither a generic ACPI zone nor CPU utilization identifies the board/VRM sensor.
     result.motherboard.push(ThermalReading {
         name: mobo_name,
-        celsius: mobo_celsius,
-        detail: Some("VRM & System Chipset".to_string()),
+        celsius: None,
+        detail: Some("Motherboard temperature requires a verified board sensor".into()),
     });
 
     // ── 5. GPU: Query nvidia-smi directly ────────────────────────────────────
@@ -249,22 +155,52 @@ pub fn read() -> DirectTemperatures {
             "--query-gpu=name,temperature.gpu",
             "--format=csv,noheader,nounits",
         ]);
-        cmd.creation_flags(CREATE_NO_WINDOW);
-        if let Ok(output) = cmd.output() {
-            if output.status.success() {
-                let text = String::from_utf8_lossy(&output.stdout);
-                for line in text.lines() {
-                    let parts: Vec<&str> = line.split(',').map(|s| s.trim()).collect();
-                    if parts.len() >= 2 {
-                        let name = parts[0].to_string();
-                        if let Ok(celsius) = parts[1].parse::<f64>() {
-                            result.gpu.push(ThermalReading {
-                                name,
-                                celsius: Some(celsius),
-                                detail: Some("NVIDIA Native Sensor".to_string()),
-                            });
-                            found_gpu = true;
+        cmd.creation_flags(CREATE_NO_WINDOW)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::null());
+
+        // nvidia-smi is an external process: an unresponsive driver/utility must not
+        // block this worker forever. Fail closed and reap timed-out children.
+        if let Ok(mut child) = cmd.spawn() {
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+            loop {
+                match child.try_wait() {
+                    Ok(Some(status)) => {
+                        if status.success() {
+                            if let Ok(output) = child.wait_with_output() {
+                                // Also bound output processing; this is a tiny GPU inventory.
+                                if output.stdout.len() <= 16 * 1024 {
+                                    let text = String::from_utf8_lossy(&output.stdout);
+                                    for line in text.lines() {
+                                        let parts: Vec<&str> = line.split(',').map(str::trim).collect();
+                                        if parts.len() >= 2 {
+                                            if let Ok(temp) = parts[1].parse::<f64>() {
+                                                if temp.is_finite() && (1.0..=150.0).contains(&temp) {
+                                                    result.gpu.push(ThermalReading {
+                                                        name: parts[0].to_string(),
+                                                        celsius: Some(temp),
+                                                        detail: Some("NVIDIA GPU sensor (nvidia-smi)".into()),
+                                                    });
+                                                    found_gpu = true;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
+                        break;
+                    }
+                    Ok(None) if std::time::Instant::now() >= deadline => {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        break;
+                    }
+                    Ok(None) => std::thread::sleep(std::time::Duration::from_millis(25)),
+                    Err(_) => {
+                        let _ = child.kill();
+                        let _ = child.wait();
+                        break;
                     }
                 }
             }
@@ -330,7 +266,7 @@ pub fn read() -> DirectTemperatures {
     }
 
     // Optional SMART temperatures via ROOT\Microsoft\Windows\Storage
-    let mut smart_temps: BTreeMap<String, f64> = BTreeMap::new();
+    let mut smart_temps: Vec<(String, f64)> = Vec::new();
     if let Ok(storage_ns) = WMIConnection::with_namespace_path("ROOT\\Microsoft\\Windows\\Storage")
     {
         if let Ok(counters) = storage_ns
@@ -354,33 +290,17 @@ pub fn read() -> DirectTemperatures {
                         .find(|d| d.get("DeviceId").and_then(|v| v.as_str()) == Some(dev_id))
                         .and_then(|d| d.get("FriendlyName").and_then(|v| v.as_str()))
                         .unwrap_or(dev_id);
-                    smart_temps.insert(friendly.to_string(), celsius as f64);
+                    smart_temps.push((friendly.to_string(), celsius as f64));
                 }
             }
         }
     }
 
-    for (idx, (model, status, size_gb, media_type)) in disks.into_iter().enumerate() {
-        let celsius = smart_temps
-            .iter()
-            .find(|(k, _)| model.contains(*k) || k.contains(&model))
-            .map(|(_, &t)| t)
-            .or_else(|| {
-                // If direct SMART query is restricted by Windows non-elevated permissions,
-                // correlate with live ACPI system thermal reading:
-                primary_acpi_temp.map(|base| {
-                    let upper = model.to_uppercase();
-                    let offset = if upper.contains("NVME") {
-                        6.5 + ((idx as f64) * 0.4)
-                    } else if upper.contains("SSD") || upper.contains("SA400") {
-                        3.0 + ((idx as f64) * 0.5)
-                    } else {
-                        4.0 + ((idx as f64) * 0.3)
-                    };
-                    ((base + offset) * 10.0).round() / 10.0
-                })
-            });
-
+    let disk_models: Vec<String> = disks.iter().map(|(model, _, _, _)| model.clone()).collect();
+    for (model, status, size_gb, media_type) in disks {
+        // Exact, unique name match only. Duplicate models or missing SMART data
+        // remain unavailable; ACPI offsets are not storage measurements.
+        let celsius = unique_storage_temperature(&model, &disk_models, &smart_temps);
         result.storage.push(StorageThermal {
             name: model,
             celsius,
@@ -409,11 +329,16 @@ mod tests {
     use super::*;
 
     #[test]
-    fn tenths_kelvin_conversion() {
-        assert_eq!(tenths_kelvin_to_celsius(2981), Some(25.0));
-        assert_eq!(tenths_kelvin_to_celsius(3731), Some(100.0));
-        assert_eq!(tenths_kelvin_to_celsius(0), None);
-        assert_eq!(tenths_kelvin_to_celsius(0xFFFFFFFF), None);
-        assert_eq!(tenths_kelvin_to_celsius(1), None);
+    fn storage_temperature_requires_an_exact_unique_match() {
+        let disks = vec!["Model A".to_string(), "Model B".to_string()];
+        let smart = vec![("model a".to_string(), 42.0)];
+        assert_eq!(unique_storage_temperature("Model A", &disks, &smart), Some(42.0));
+        assert_eq!(unique_storage_temperature("Model B", &disks, &smart), None);
+        assert_eq!(unique_storage_temperature("Model", &disks, &smart), None);
+        let duplicates = vec!["Model A".to_string(), "model a".to_string()];
+        assert_eq!(unique_storage_temperature("Model A", &duplicates, &smart), None);
+        let ambiguous = vec![("Model A".to_string(), 42.0), ("model a".to_string(), 43.0)];
+        assert_eq!(unique_storage_temperature("Model A", &disks, &ambiguous), None);
+        assert_eq!(unique_storage_temperature("Model A", &disks, &[("Model A".into(), f64::NAN)]), None);
     }
 }

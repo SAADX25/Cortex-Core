@@ -14,3 +14,9 @@ Cortex's external adapter is experimental and has only been tested with mock dat
 10. Warnings default off. Expand **Optional temperature warnings**, enable them and set category thresholds. These are display preferences, not manufacturer limits, protection, shutdown or hardware control. Only fresh available readings can warn. Missing, unsupported, ambiguous and stale data clears warnings. The chart's accessible observation table lists the most recent 20 observations in the selected range.
 
 The research, licenses, architecture, refusal limitations and future-helper evaluation are in [External temperature sources](external-temperature-sources.md). These changes do not claim universal sensor support, freeze prevention or production-ready live monitoring.
+
+## Direct Windows temperature panel (safety correction)
+
+The direct temperature panel no longer infers CPU package, motherboard, or storage temperatures from ACPI and processor load. A missing physical sensor is **Not available**, not a computed value. Storage telemetry accepts only a uniquely matching Windows Storage Reliability Counter name; differences between FriendlyName and Win32_DiskDrive Model can make otherwise valid readings unavailable. This conservative behavior avoids incorrect disk attribution but does not provide complete NVMe sensor coverage. NVIDIA values come only from successful native `nvidia-smi` readings; AMD/Intel GPU temperatures remain unavailable without an independently verified sensor source.
+
+Direct readings are now initiated only by an explicit button and never auto-poll on page mount. On the machine with unexplained freezes, retain the verified Safe Mode executable; do not use the direct thermal panel or test it there. These changes are static fixes, not physical-device validation or a guarantee against Windows freezes.
