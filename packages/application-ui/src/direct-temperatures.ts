@@ -45,7 +45,7 @@ export async function readDirectTemperatures(): Promise<DirectTemperatures> {
   try {
     return await invoke<DirectTemperatures>('read_direct_temperatures');
   } catch {
-    return empty();
+    return { ...empty(), unavailable: ['Direct thermal read failed or was blocked'] };
   }
 }
 
