@@ -1,6 +1,6 @@
 param(
     [Parameter(Mandatory=$true)]
-    [ValidateSet('web-check','rust-check','rust-test','desktop-build','browser-monitoring','packaged-monitoring','packaged-regression','safety-build','safety-startup','safety-regression','baseline-browser')]
+    [ValidateSet('web-check','rust-check','rust-test','desktop-build','browser-monitoring','packaged-monitoring','packaged-regression','safety-build','safety-startup','safety-regression','baseline-browser','exit-passive','exit-extended','exit-pipe')]
     [string]$Task,
     [switch]$Child
 )
@@ -21,6 +21,9 @@ if ($Child) {
         'safety-build' { & pnpm desktop:build:safety }
         'safety-startup' { & pnpm test:desktop:safety-startup }
         'safety-regression' { & pnpm test:desktop:safety-regression }
+        'exit-passive' { & node tools/desktop/exit-investigation.mjs passive }
+        'exit-extended' { & node tools/desktop/exit-investigation.mjs extended }
+        'exit-pipe' { & node tools/desktop/exit-investigation.mjs passive --break-stderr }
         'baseline-browser' { & pnpm exec playwright test --project=chromium --project=webkit --project=mobile-chrome --project=mobile-safari --workers=1 }
         'browser-monitoring' { & pnpm exec playwright test tests/e2e/monitoring.spec.ts --project=chromium --project=webkit --project=mobile-chrome --project=mobile-safari }
         'packaged-monitoring' { & pnpm test:monitoring:desktop }

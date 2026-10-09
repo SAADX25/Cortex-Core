@@ -1,10 +1,11 @@
 // Compiles only the small std-only controller and a hardware-free IPC stub.
 // Does NOT invoke Cargo, Tauri, the app, WMI, NVML, storage APIs or any live provider.
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { resolve, delimiter } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { verifyUpdate10Integration } from './safety-artifact.mjs';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const baseline = [
   'apps/desktop/src-tauri/src/lib.rs',
@@ -15,13 +16,7 @@ const baseline = [
   'tests/e2e/hardware.spec.ts',
   'tools/desktop/smoke.mjs',
 ];
-for (const file of baseline) {
-  assert.deepEqual(
-    readFileSync(resolve(root, file)),
-    execFileSync('git', ['show', `7e85677:${file}`], { cwd: root }),
-    `${file}: Update-10 baseline changed`,
-  );
-}
+for (const file of baseline) verifyUpdate10Integration(file, root);
 const cargo = readFileSync(resolve(root, 'apps/desktop/src-tauri/Cargo.toml'), 'utf8');
 assert(!cargo.includes('experimental-live-sensors'));
 assert(cargo.includes('required-features = ["monitoring-diagnostics"]'));

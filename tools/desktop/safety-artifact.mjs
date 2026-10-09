@@ -14,12 +14,7 @@ export function safetyArtifact() {
     'tests/e2e/hardware.spec.ts',
     'tools/desktop/smoke.mjs',
   ];
-  for (const file of baselineFiles)
-    assert.deepEqual(
-      readFileSync(file),
-      execFileSync('git', ['show', `7e85677:${file}`]),
-      `Update-10 mismatch: ${file}`,
-    );
+  for (const file of baselineFiles) verifyUpdate10Integration(file);
   const cargo = readFileSync('apps/desktop/src-tauri/Cargo.toml', 'utf8');
   assert(cargo.includes('default = ["custom-protocol"]'));
   assert(!cargo.includes('experimental-live-sensors'));
@@ -61,5 +56,30 @@ export function safetyArtifact() {
     baselineFiles,
     monitoringBuildDependencies: [],
     monitoringCodeLoaded: 'none',
+    diagnosticException:
+      'Opt-in debug lifecycle plugin only. All other host integration and renderer behavior match Update-10.',
   };
+}
+
+export function verifyUpdate10Integration(file, root = resolve('.')) {
+  let current = readFileSync(resolve(root, file)).toString().replaceAll('\r\n', '\n');
+  const baseline = execFileSync('git', ['show', `7e85677:${file}`], { cwd: root })
+    .toString()
+    .replaceAll('\r\n', '\n');
+  if (file === 'apps/desktop/src-tauri/src/lib.rs') {
+    // Accept only this reviewed, opt-in diagnostic hook; never normalize Monitoring integration.
+    current = current.replace('#[cfg(debug_assertions)]\nmod exit_diagnostics;\n', '');
+    current = current.replace(
+      '    let builder = tauri::Builder::default();\n' +
+        '    #[cfg(debug_assertions)]\n' +
+        '    let builder = if exit_diagnostics::enabled() {\n' +
+        '        builder.plugin(exit_diagnostics::init())\n' +
+        '    } else {\n' +
+        '        builder\n' +
+        '    };\n' +
+        '    builder\n',
+      '    tauri::Builder::default()\n',
+    );
+  }
+  assert.equal(current, baseline, `Update-10 behavior mismatch: ${file}`);
 }

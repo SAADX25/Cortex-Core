@@ -1,5 +1,7 @@
 mod build;
 mod catalog;
+#[cfg(debug_assertions)]
+mod exit_diagnostics;
 mod hardware;
 use serde::Serialize;
 use std::{fs, io::Write, path::PathBuf, sync::Mutex};
@@ -194,7 +196,14 @@ fn open_documentation(key: &str, app: tauri::AppHandle) -> Result<(), String> {
 }
 pub fn run() {
     let flags = StateFlags::SIZE | StateFlags::POSITION | StateFlags::MAXIMIZED;
-    tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    #[cfg(debug_assertions)]
+    let builder = if exit_diagnostics::enabled() {
+        builder.plugin(exit_diagnostics::init())
+    } else {
+        builder
+    };
+    builder
         .plugin(
             tauri_plugin_window_state::Builder::default()
                 .with_state_flags(flags)
