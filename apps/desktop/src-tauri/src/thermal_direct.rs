@@ -64,7 +64,7 @@ fn unique_counter_temperature(device_id: &str, counters: &[(String, f64)]) -> Op
     let readings: Vec<f64> = counters
         .iter()
         .filter(|(id, value)| {
-            id == device_id && value.is_finite() && (1.0..=120.0).contains(value)
+            id.as_str() == device_id && value.is_finite() && (1.0..=120.0).contains(value)
         })
         .map(|(_, value)| *value)
         .collect();
@@ -101,7 +101,10 @@ fn verified_storage_temperature(
         return None;
     }
     if let Some(id) = physical_matches.first() {
-        if physical_disks.iter().filter(|(other, _)| other == id).count() != 1 {
+        if physical_disks
+            .iter()
+            .filter(|(other, _)| other.as_str() == *id)
+            .count() != 1 {
             return None;
         }
         if let Some(temperature) = unique_counter_temperature(id, counters) {
@@ -131,7 +134,7 @@ fn verified_storage_temperature(
     let id = number.to_string();
     if physical_disks
         .iter()
-        .any(|(other, candidate)| other == &id && serial_key(candidate) != Some(key))
+        .any(|(other, candidate)| other == &id && serial_key(candidate) != Some(key.clone()))
     {
         return None;
     }
