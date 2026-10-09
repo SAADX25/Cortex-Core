@@ -234,7 +234,7 @@ export default function DirectThermal() {
             {storageList.map((disk, idx) => {
               const status = getTempStatus(disk.celsius);
               return (
-                <div className="storage-row-card" key={`${disk.name}:${idx}`}>
+                <div className="storage-row-card" key={`${disk.diskIndex ?? idx}:${disk.name}`}>
                   <div className="storage-icon-info">
                     <div className="storage-icon">💾</div>
                     <div className="storage-details">
@@ -242,6 +242,7 @@ export default function DirectThermal() {
                         {disk.name}
                       </span>
                       <span className="storage-meta">
+                        {disk.diskIndex != null ? `Disk ${disk.diskIndex} · ` : ''}
                         {disk.sizeGb ? `${disk.sizeGb} GB · ` : ''}
                         {disk.mediaType || 'Fixed Disk'}
                       </span>
