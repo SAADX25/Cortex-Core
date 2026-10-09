@@ -14,6 +14,7 @@ export interface ThermalReading {
 
 export interface StorageThermal {
   name: string;
+  diskIndex?: number | null;
   celsius: number | null;
   status: string;
   mediaType?: string;
