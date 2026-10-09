@@ -5,7 +5,7 @@
  * Reads directly via native Windows WMI, CIMV2 and vendor utilities
  * without requiring any third-party monitor software or elevation.
  */
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { isDesktop } from './platform';
 import { useRuntimePolicy } from './runtime-policy';
 import {
@@ -14,14 +14,14 @@ import {
   readDirectTemperatures,
 } from './direct-temperatures';
 
-const POLL_INTERVAL_MS = 3000;
-
+// Direct WMI telemetry is explicitly requested only. Never start hardware polling
+// just because a user opened the Monitoring page on an unvalidated machine.
 function getTempStatus(celsius: number | null) {
-  if (celsius === null) return { label: 'Active', className: 'status-normal' };
+  if (celsius === null || !Number.isFinite(celsius)) return { label: 'Not available', className: 'status-normal' };
   if (celsius >= 80) return { label: 'High', className: 'status-hot' };
   if (celsius >= 70) return { label: 'Warm', className: 'status-warm' };
-  if (celsius >= 45) return { label: 'Optimal', className: 'status-optimal' };
-  return { label: 'Cool', className: 'status-cool' };
+  if (celsius >= 45) return { label: 'Measured', className: 'status-optimal' };
+  return { label: 'Measured', className: 'status-cool' };
 }
 
 function ComponentCard({
@@ -38,7 +38,7 @@ function ComponentCard({
   badgeText?: string;
 }) {
   const status = getTempStatus(celsius);
-  const percent = celsius !== null ? Math.min(100, Math.max(10, (celsius / 100) * 100)) : 30;
+  const percent = celsius !== null ? Math.min(100, Math.max(0, celsius)) : 0;
 
   return (
     <article className="hardware-thermal-card" aria-label={`${category}: ${name}`}>
@@ -57,7 +57,7 @@ function ComponentCard({
           <span
             className={`temp-value ${celsius !== null && celsius >= 80 ? 'is-hot' : celsius !== null && celsius >= 70 ? 'is-warm' : ''}`}
           >
-            {celsius !== null ? `${celsius.toFixed(1)}°` : 'Active'}
+            {celsius !== null ? `${celsius.toFixed(1)}°` : 'Not available'}
           </span>
           {celsius !== null && <span className="temp-unit">C</span>}
         </div>
@@ -81,63 +81,29 @@ export default function DirectThermal() {
   const [temps, setTemps] = useState<DirectTemperatures | null>(null);
   const [loading, setLoading] = useState(false);
   const [lastAt, setLastAt] = useState<number | null>(null);
-  const alive = useRef(true);
-  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inFlight = useRef(false);
+  const [error, setError] = useState('');
+  const [hasRequested, setHasRequested] = useState(false);
 
-  const stopTimer = () => {
-    if (timer.current !== null) {
-      clearTimeout(timer.current);
-      timer.current = null;
-    }
-  };
-
-  const poll = useCallback(async () => {
-    if (!alive.current || !allowed) return;
+  const refresh = useCallback(async () => {
+    if (inFlight.current || !allowed || document.hidden || !document.hasFocus()) return;
+    inFlight.current = true;
     setLoading(true);
+    setError('');
+    setHasRequested(true);
     try {
       const data = await readDirectTemperatures();
-      if (!alive.current) return;
       setTemps(data);
       setLastAt(Date.now());
+      if (data.unavailable.length) setError(data.unavailable.join(', '));
+    } catch {
+      setError('Temperature source unavailable.');
     } finally {
-      if (alive.current) {
-        setLoading(false);
-        timer.current = setTimeout(poll, POLL_INTERVAL_MS);
-      }
+      inFlight.current = false;
+      setLoading(false);
     }
   }, [allowed]);
 
-  useEffect(() => {
-    alive.current = true;
-
-    const pause = () => stopTimer();
-    const resume = () => {
-      if (!document.hidden && document.hasFocus()) void poll();
-    };
-    const handleVisibility = () => {
-      if (document.hidden) {
-        pause();
-      } else {
-        resume();
-      }
-    };
-
-    document.addEventListener('visibilitychange', handleVisibility);
-    window.addEventListener('blur', pause);
-    window.addEventListener('focus', resume);
-    window.addEventListener('pagehide', pause);
-
-    void poll();
-
-    return () => {
-      alive.current = false;
-      stopTimer();
-      document.removeEventListener('visibilitychange', handleVisibility);
-      window.removeEventListener('blur', pause);
-      window.removeEventListener('focus', resume);
-      window.removeEventListener('pagehide', pause);
-    };
-  }, [poll]);
 
   if (!isDesktop) {
     return (
@@ -185,9 +151,15 @@ export default function DirectThermal() {
         </div>
         <div className="thermal-status-pill">
           <span className={`pulse-dot ${loading ? 'is-loading' : 'is-live'}`} />
-          <span>{loading ? 'Refreshing' : lastAt ? 'Live' : 'Initializing'}</span>
+          <span>{loading ? 'Reading' : lastAt ? 'Last requested' : 'Not connected'}</span>
         </div>
+        <button className="button secondary" type="button" disabled={!allowed || loading} onClick={() => void refresh()}>
+          {loading ? 'Reading…' : 'Read temperatures once'}
+        </button>
       </div>
+      <p className="muted">Experimental, user-initiated sensor read. No background polling. Missing or ambiguous temperatures are not estimated.</p>
+      {error && <p role="status" className="muted">{error}</p>}
+      {!hasRequested && <p className="muted">No temperature measurements requested yet.</p>}
 
       <div className="hardware-cards-grid">
         {/* CPU Card */}
@@ -225,17 +197,17 @@ export default function DirectThermal() {
           <div className="card-top">
             <div className="card-category-wrapper">
               <span className="card-category">MEMORY (RAM)</span>
-              <span className="card-badge status-cool">Optimal</span>
+              <span className="card-badge status-normal">Not measured</span>
             </div>
             <h3 className="card-device-name">System Memory</h3>
           </div>
           <div className="card-body">
             <div className="temp-display">
               <span className="temp-value" style={{ fontSize: '24px', letterSpacing: '-0.02em' }}>
-                Operational
+                Not measured
               </span>
             </div>
-            <span className="card-subtitle">Normal operating condition</span>
+            <span className="card-subtitle">Temperature / health not independently measured</span>
           </div>
         </article>
       </div>
@@ -276,7 +248,7 @@ export default function DirectThermal() {
                         </span>
                       </div>
                     ) : (
-                      <span className="storage-status-tag status-cool">Healthy (OK)</span>
+                      <span className="storage-status-tag status-normal">Not available</span>
                     )}
                   </div>
                 </div>
