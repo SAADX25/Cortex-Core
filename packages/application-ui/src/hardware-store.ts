@@ -19,42 +19,58 @@ export function sameHardware(a: HardwareScan | null, b: HardwareScan): boolean {
   return JSON.stringify({ ...a, scannedAt: 0 }) === JSON.stringify({ ...b, scannedAt: 0 });
 }
 export function createHardwareStore(bridge: HardwareBridge) {
+  let revision = 0;
+  let startup: Promise<void> | undefined;
+  let activeScan: Promise<void> | undefined;
   return createStore<HardwareState>((set, get) => ({
     scan: null,
     scanning: false,
     started: false,
     error: null,
     async start() {
-      if (get().started) return;
+      if (startup) return startup;
       set({ started: true });
-      try {
-        const cached = await bridge.restore();
-        if (cached) set({ scan: parseHardwareScan(cached) });
-      } catch {
-        /* A broken cache must not prevent a fresh scan. */
-      }
-      await get().rescan();
+      const initialRevision = revision;
+      startup = (async () => {
+        try {
+          const cached = await bridge.restore();
+          if (cached && revision === initialRevision) set({ scan: parseHardwareScan(cached) });
+        } catch {
+          /* A broken cache must not prevent a fresh scan. */
+        }
+        if (revision === initialRevision) await get().rescan();
+        else await activeScan;
+      })();
+      return startup;
     },
     async rescan() {
-      if (get().scanning) return;
+      if (activeScan) return activeScan;
+      revision++;
       set({ scanning: true, error: null });
+      activeScan = (async () => {
+        try {
+          const fresh = parseHardwareScan(await bridge.scan());
+          const previous = get().scan;
+          // Preserve device array identities on unchanged scans; update only the last-scanned time.
+          set({
+            scan: sameHardware(previous, fresh)
+              ? { ...previous!, scannedAt: fresh.scannedAt }
+              : fresh,
+            scanning: false,
+          });
+        } catch {
+          set({
+            scanning: false,
+            error: isDesktop
+              ? 'Hardware scanning is unavailable. Your last successful scan is kept. Rescan to try again.'
+              : 'Local hardware scanning is available in the Windows desktop app.',
+          });
+        }
+      })();
       try {
-        const fresh = parseHardwareScan(await bridge.scan());
-        const previous = get().scan;
-        // Preserve device array identities on unchanged scans; update only the last-scanned time.
-        set({
-          scan: sameHardware(previous, fresh)
-            ? { ...previous!, scannedAt: fresh.scannedAt }
-            : fresh,
-          scanning: false,
-        });
-      } catch {
-        set({
-          scanning: false,
-          error: isDesktop
-            ? 'Hardware scanning is unavailable. Your last successful scan is kept. Rescan to try again.'
-            : 'Local hardware scanning is available in the Windows desktop app.',
-        });
+        await activeScan;
+      } finally {
+        activeScan = undefined;
       }
     },
   }));

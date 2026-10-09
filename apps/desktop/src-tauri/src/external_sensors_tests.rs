@@ -12,6 +12,10 @@ fn parsed(value: &serde_json::Value) -> Result<Snapshot, &'static str> {
 fn first_sensor(value: &mut serde_json::Value) -> &mut serde_json::Value {
     &mut value["Children"][0]["Children"][0]["Children"][0]["Children"][0]
 }
+fn enable(adapter: &Adapter) -> u64 {
+    let owner = adapter.open_session().unwrap();
+    adapter.configure_owned(owner, 1, true).unwrap()
+}
 
 #[test]
 fn vendor_fixtures_preserve_identity_categories_units_and_observation() {
@@ -235,7 +239,7 @@ fn http_rejects_redirect_auth_encoding_html_and_bad_framing() {
 fn consent_rate_overlap_disable_late_results_and_shutdown_use_mock_state_only() {
     let adapter = Adapter::default();
     assert!(!adapter.begin(0).unwrap());
-    let generation = adapter.configure(true).unwrap();
+    let generation = enable(&adapter);
     assert!(adapter.begin(generation).unwrap());
     assert!(!adapter.begin(generation).unwrap());
     adapter.finish(generation, parse_json(INTEL, 100_000));
@@ -252,17 +256,17 @@ fn consent_rate_overlap_disable_late_results_and_shutdown_use_mock_state_only() 
     adapter.configure(false).unwrap();
     adapter.finish(generation, parse_json(INTEL, 100_000));
     assert_eq!(adapter.snapshot(generation).status, "disabled");
-    let next = adapter.configure(true).unwrap();
+    let next = enable(&adapter);
     adapter.finish(next, Err("Sensor server stopped or request timed out"));
     assert!(adapter.snapshot(next).sensors.is_empty());
 }
 #[test]
 fn toggling_consent_does_not_create_replacement_workers() {
     let adapter = Adapter::default();
-    let first = adapter.configure(true).unwrap();
+    let first = enable(&adapter);
     assert!(adapter.begin(first).unwrap());
     adapter.configure(false).unwrap();
-    let next = adapter.configure(true).unwrap();
+    let next = enable(&adapter);
     assert!(!adapter.begin(next).unwrap());
     adapter.finish(first, parse_json(INTEL, 100_000));
     assert!(adapter.snapshot(next).sensors.is_empty());
@@ -270,13 +274,85 @@ fn toggling_consent_does_not_create_replacement_workers() {
 
 #[test]
 fn test_builds_cannot_activate_a_real_sensor_source() {
-    let adapter = Adapter::default();
-    let generation = adapter.configure(true).unwrap();
-    assert!(adapter.begin(generation).unwrap());
-    let snapshot = adapter.complete(generation);
+    let adapter = Arc::new(Adapter::default());
+    let generation = enable(&adapter);
+    let snapshot = adapter.ticket(generation).unwrap().unwrap().complete();
     assert_eq!(
         snapshot.status,
         "Test builds cannot inspect listeners or connect a real sensor source"
     );
     assert!(snapshot.sensors.is_empty());
+}
+
+#[test]
+fn reversed_enable_disable_commands_cannot_restore_consent() {
+    let adapter = Adapter::default();
+    assert!(adapter.configure(true).is_err());
+    let owner = adapter.open_session().unwrap();
+    assert!(!adapter.session.lock().unwrap().enabled);
+    adapter.configure_owned(owner, 2, false).unwrap();
+    assert!(adapter.configure_owned(owner, 1, true).is_err());
+    assert!(adapter.configure_owned(owner, 2, true).is_err());
+    assert!(adapter.configure_owned(owner, 0, true).is_err());
+    assert!(
+        adapter
+            .configure_owned(owner, 9_007_199_254_740_992, true)
+            .is_err()
+    );
+    assert!(!adapter.session.lock().unwrap().enabled);
+}
+
+#[test]
+fn expired_owner_cleanup_cannot_disable_reconnection_and_lifecycle_invalidates_enable() {
+    let adapter = Adapter::default();
+    let old = adapter.open_session().unwrap();
+    adapter.configure_owned(old, 1, true).unwrap();
+    let new = adapter.open_session().unwrap();
+    let generation = adapter.configure_owned(new, 1, true).unwrap();
+    assert!(adapter.configure_owned(old, 2, false).is_err());
+    assert_eq!(adapter.snapshot(generation).status, "waiting");
+    for _ in 0..4 {
+        // Native hide/focus, navigation/reload and close use the same revocation.
+        adapter.revoke_all().unwrap();
+        assert!(adapter.configure_owned(new, 2, true).is_err());
+        assert!(!adapter.session.lock().unwrap().enabled);
+    }
+}
+
+#[test]
+fn dropped_or_panicked_worker_permit_releases_slot_and_preserves_cooldown() {
+    let adapter = Arc::new(Adapter::default());
+    let generation = enable(&adapter);
+    let ticket = adapter.ticket(generation).unwrap().unwrap();
+    assert!(adapter.ticket(generation).unwrap().is_none());
+    drop(ticket);
+    assert!(adapter.session.lock().unwrap().in_flight.is_none());
+    assert!(adapter.ticket(generation).unwrap().is_none());
+    adapter.session.lock().unwrap().next_due = Instant::now();
+    let ticket = adapter.ticket(generation).unwrap().unwrap();
+    let unwound = std::panic::catch_unwind(move || {
+        let _owned = ticket;
+        panic!("synthetic worker failure");
+    });
+    assert!(unwound.is_err());
+    assert!(adapter.session.lock().unwrap().in_flight.is_none());
+    assert!(adapter.snapshot(generation).sensors.is_empty());
+}
+
+#[test]
+fn old_worker_cleanup_cannot_publish_or_release_another_generation() {
+    let adapter = Arc::new(Adapter::default());
+    let old = enable(&adapter);
+    let ticket = adapter.ticket(old).unwrap().unwrap();
+    adapter.revoke_all().unwrap();
+    let new = enable(&adapter);
+    assert!(adapter.ticket(new).unwrap().is_none());
+    drop(ticket);
+    assert_eq!(adapter.snapshot(new).status, "waiting");
+    adapter.session.lock().unwrap().next_due = Instant::now();
+    let next = adapter.ticket(new).unwrap().unwrap();
+    adapter.finish(old, parse_json(INTEL, 100_000));
+    assert_eq!(adapter.session.lock().unwrap().in_flight, Some(new));
+    assert!(adapter.snapshot(new).sensors.is_empty());
+    drop(next);
 }

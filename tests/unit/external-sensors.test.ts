@@ -51,13 +51,19 @@ describe('normalized external sensor data', () => {
 describe('session consent and bounded polling', () => {
   it('starts dormant, reads only after consent and schedules from completion', async () => {
     vi.useFakeTimers();
-    const bridge = { configure: vi.fn(async () => 1), read: vi.fn(async () => snapshot) };
+    const bridge = {
+      open: vi.fn(async () => 1),
+      configure: vi.fn(async () => 2),
+      read: vi.fn(async () => snapshot),
+    };
     const publish = vi.fn();
     const poller = new SensorPoller(bridge, scheduler, publish);
     await vi.advanceTimersByTimeAsync(30000);
+    expect(bridge.open).not.toHaveBeenCalled();
+    expect(bridge.configure).not.toHaveBeenCalled();
     expect(bridge.read).not.toHaveBeenCalled();
     await poller.start();
-    expect(bridge.configure).toHaveBeenCalledWith(true);
+    expect(bridge.configure).toHaveBeenCalledWith(true, 1, 1);
     expect(bridge.read).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(4999);
     expect(bridge.read).toHaveBeenCalledTimes(1);
@@ -66,12 +72,13 @@ describe('session consent and bounded polling', () => {
     poller.stop();
     await vi.advanceTimersByTimeAsync(30000);
     expect(bridge.read).toHaveBeenCalledTimes(2);
-    expect(bridge.configure).toHaveBeenLastCalledWith(false);
+    expect(bridge.configure).toHaveBeenLastCalledWith(false, 1, 2);
   });
   it('never overlaps a hung read and discards completion after navigation/hidden/disconnect', async () => {
     vi.useFakeTimers();
     let resolve!: (value: unknown) => void;
     const bridge = {
+      open: vi.fn(async () => 1),
       configure: vi.fn(async () => 1),
       read: vi.fn(
         () =>
@@ -96,6 +103,7 @@ describe('session consent and bounded polling', () => {
   it('clears data when server shuts down or JSON is rejected', async () => {
     vi.useFakeTimers();
     const bridge = {
+      open: vi.fn(async () => 1),
       configure: vi.fn(async () => 1),
       read: vi
         .fn()
@@ -116,6 +124,7 @@ describe('session consent and bounded polling', () => {
   it('revoke while setup is pending prevents any read', async () => {
     let resolve!: (value: number) => void;
     const bridge = {
+      open: vi.fn(async () => 1),
       configure: vi.fn((consent: boolean) =>
         consent
           ? new Promise<number>((r) => {
@@ -127,9 +136,111 @@ describe('session consent and bounded polling', () => {
     };
     const poller = new SensorPoller(bridge, scheduler, vi.fn());
     const pending = poller.start();
+    await Promise.resolve();
     poller.stop();
     resolve(1);
     await pending;
     expect(bridge.read).not.toHaveBeenCalled();
+    expect(bridge.configure).toHaveBeenLastCalledWith(false, 1, 2);
+  });
+  it('stop during inert owner creation never sends an enable', async () => {
+    let finish!: (owner: number) => void;
+    const bridge = {
+      open: () =>
+        new Promise<number>((resolve) => {
+          finish = resolve;
+        }),
+      configure: vi.fn(async () => 2),
+      read: vi.fn(),
+    };
+    const poller = new SensorPoller(bridge, scheduler, vi.fn());
+    const pending = poller.start();
+    poller.stop();
+    finish(1);
+    await pending;
+    expect(bridge.configure).not.toHaveBeenCalled();
+    expect(bridge.read).not.toHaveBeenCalled();
+  });
+  it('rapid reconnect ignores late old setup completion and old cleanup', async () => {
+    vi.useFakeTimers();
+    let finish!: (session: number) => void;
+    const bridge = {
+      open: vi.fn().mockResolvedValueOnce(1).mockResolvedValueOnce(3),
+      configure: vi.fn().mockImplementation((consent, owner) =>
+        consent && owner === 1
+          ? new Promise<number>((resolve) => {
+              finish = resolve;
+            })
+          : Promise.resolve(4),
+      ),
+      read: vi.fn(async () => snapshot),
+    };
+    const publish = vi.fn();
+    const phase = vi.fn();
+    const poller = new SensorPoller(bridge, scheduler, publish, phase);
+    const first = poller.start();
+    await Promise.resolve();
+    poller.stop();
+    await poller.start();
+    finish(2);
+    await first;
+    expect(bridge.read).toHaveBeenCalledExactlyOnceWith(4);
+    expect(phase).toHaveBeenLastCalledWith('monitoring');
+    expect(publish).toHaveBeenLastCalledWith(snapshot);
+    poller.stop();
+    expect(bridge.configure).toHaveBeenLastCalledWith(false, 3, 2);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it('a pending old read does not overlap a new session or overwrite its data', async () => {
+    vi.useFakeTimers();
+    let finish!: (value: unknown) => void;
+    const bridge = {
+      open: vi.fn().mockResolvedValueOnce(1).mockResolvedValueOnce(3),
+      configure: vi.fn(async () => 4),
+      read: vi
+        .fn()
+        .mockImplementationOnce(
+          () =>
+            new Promise((resolve) => {
+              finish = resolve;
+            }),
+        )
+        .mockResolvedValue(snapshot),
+    };
+    const publish = vi.fn();
+    const poller = new SensorPoller(bridge, scheduler, publish);
+    const old = poller.start();
+    await vi.advanceTimersByTimeAsync(0);
+    poller.stop();
+    await poller.start();
+    await vi.advanceTimersByTimeAsync(20000);
+    expect(bridge.read).toHaveBeenCalledTimes(1);
+    finish({ ...snapshot, status: 'old error' });
+    await old;
+    expect(publish).toHaveBeenLastCalledWith(unavailableSensors('waiting'));
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(bridge.read).toHaveBeenCalledTimes(2);
+    expect(publish).toHaveBeenLastCalledWith(snapshot);
+    poller.stop();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+  it('terminal refusal revokes consent, removes polling and permits an explicit retry', async () => {
+    vi.useFakeTimers();
+    const bridge = {
+      open: vi.fn(async () => 1),
+      configure: vi.fn(async () => 2),
+      read: vi
+        .fn()
+        .mockResolvedValueOnce(unavailableSensors('Binding refused'))
+        .mockResolvedValue(snapshot),
+    };
+    const phase = vi.fn();
+    const poller = new SensorPoller(bridge, scheduler, vi.fn(), phase);
+    expect(await poller.start()).toBe(false);
+    expect(phase).toHaveBeenLastCalledWith('error');
+    expect(bridge.configure).toHaveBeenLastCalledWith(false, 1, 2);
+    expect(vi.getTimerCount()).toBe(0);
+    expect(await poller.start()).toBe(true);
+    poller.stop();
   });
 });

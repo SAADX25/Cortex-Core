@@ -11,22 +11,33 @@ use tauri_plugin_opener::OpenerExt;
 use tauri_plugin_window_state::{AppHandleExt, StateFlags};
 
 #[tauri::command]
-fn configure_external_sensors(
-    consent: bool,
+fn open_external_sensor_session(
     state: tauri::State<'_, std::sync::Arc<external_sensors::Adapter>>,
 ) -> Result<u64, String> {
-    state.configure(consent)
+    state.open_session()
+}
+#[tauri::command]
+fn configure_external_sensors(
+    consent: bool,
+    owner: Option<u64>,
+    revision: Option<u64>,
+    state: tauri::State<'_, std::sync::Arc<external_sensors::Adapter>>,
+) -> Result<u64, String> {
+    match (owner, revision) {
+        (Some(owner), Some(revision)) => state.configure_owned(owner, revision, consent),
+        (None, None) => state.configure(consent),
+        _ => Err("Both sensor owner and revision are required".into()),
+    }
 }
 #[tauri::command]
 async fn read_external_sensors(
     session: u64,
     state: tauri::State<'_, std::sync::Arc<external_sensors::Adapter>>,
 ) -> Result<external_sensors::Snapshot, String> {
-    if !state.begin(session)? {
+    let Some(ticket) = state.inner().ticket(session)? else {
         return Ok(state.snapshot(session));
-    }
-    let adapter = state.inner().clone();
-    tauri::async_runtime::spawn_blocking(move || adapter.complete(session))
+    };
+    tauri::async_runtime::spawn_blocking(move || ticket.complete())
         .await
         .map_err(|_| "Sensor worker unavailable".into())
 }
@@ -272,10 +283,16 @@ pub fn run() {
                 log_dir: log,
                 logged_failure: Mutex::new(false),
             });
+            let sensor_lifecycle = app.handle().clone();
             let window =
                 tauri::WebviewWindowBuilder::from_config(app, &app.config().app.windows[0])?
                     .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny)
-                    .on_navigation(|url| {
+                    .on_navigation(move |url| {
+                        if let Some(adapter) = sensor_lifecycle
+                            .try_state::<std::sync::Arc<external_sensors::Adapter>>()
+                        {
+                            let _ = adapter.revoke_all();
+                        }
                         if cfg!(debug_assertions)
                             && url.host_str() == Some("127.0.0.1")
                             && url.port() == Some(5173)
@@ -307,13 +324,20 @@ pub fn run() {
             Ok(())
         })
         .on_window_event(move |window, event| {
-            if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+            if matches!(
+                event,
+                tauri::WindowEvent::CloseRequested { .. }
+                    | tauri::WindowEvent::Destroyed
+                    | tauri::WindowEvent::Focused(false)
+            ) {
                 if let Some(adapter) = window
                     .app_handle()
                     .try_state::<std::sync::Arc<external_sensors::Adapter>>()
                 {
-                    let _ = adapter.configure(false);
+                    let _ = adapter.revoke_all();
                 }
+            }
+            if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
                 // Persist normal/maximized geometry, never an accidental fullscreen launch state.
                 let _ = window.set_fullscreen(false);
                 let _ = window.app_handle().save_window_state(flags);
@@ -330,6 +354,7 @@ pub fn run() {
             load_development_build,
             save_development_build,
             configure_external_sensors,
+            open_external_sensor_session,
             read_external_sensors
         ])
         .run(tauri::generate_context!())

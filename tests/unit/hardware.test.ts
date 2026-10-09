@@ -61,13 +61,14 @@ describe('scan startup and replacement', () => {
     const bridge = { restore: vi.fn(async () => hardwareFixture), scan: vi.fn(() => fresh) };
     const store = createHardwareStore(bridge);
     const startup = store.getState().start();
-    await store.getState().start();
+    const duplicate = store.getState().start();
     await Promise.resolve();
     expect(store.getState().scan?.cpu[0]?.name).toBe(hardwareFixture.cpu[0]?.name);
     expect(store.getState().scanning).toBe(true);
     expect(bridge.scan).toHaveBeenCalledTimes(1);
     finish({ ...hardwareFixture, scannedAt: hardwareFixture.scannedAt + 1000 });
     await startup;
+    await duplicate;
     expect(store.getState().scanning).toBe(false);
   });
   it('replaces changed hardware and keeps arrays for unchanged hardware', async () => {
@@ -114,9 +115,28 @@ describe('scan startup and replacement', () => {
     );
     const store = createHardwareStore({ restore: async () => null, scan });
     const first = store.getState().rescan();
-    await store.getState().rescan();
+    const duplicate = store.getState().rescan();
     expect(scan).toHaveBeenCalledTimes(1);
     finish(hardwareFixture);
     await first;
+    await duplicate;
+  });
+  it('late cache restoration cannot replace a completed manual rescan or trigger a second scan', async () => {
+    let restore!: (value: unknown) => void;
+    const fresh = { ...hardwareFixture, cpu: [{ name: 'New CPU', properties: {} }] };
+    const bridge = {
+      restore: () =>
+        new Promise((resolve) => {
+          restore = resolve;
+        }),
+      scan: vi.fn(async () => fresh),
+    };
+    const store = createHardwareStore(bridge);
+    const startup = store.getState().start();
+    await store.getState().rescan();
+    restore(hardwareFixture);
+    await startup;
+    expect(store.getState().scan).toEqual(fresh);
+    expect(bridge.scan).toHaveBeenCalledTimes(1);
   });
 });
