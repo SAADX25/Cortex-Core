@@ -172,14 +172,18 @@ pub fn read() -> DirectTemperatures {
                                 if output.stdout.len() <= 16 * 1024 {
                                     let text = String::from_utf8_lossy(&output.stdout);
                                     for line in text.lines() {
-                                        let parts: Vec<&str> = line.split(',').map(str::trim).collect();
+                                        let parts: Vec<&str> =
+                                            line.split(',').map(str::trim).collect();
                                         if parts.len() >= 2 {
                                             if let Ok(temp) = parts[1].parse::<f64>() {
-                                                if temp.is_finite() && (1.0..=150.0).contains(&temp) {
+                                                if temp.is_finite() && (1.0..=150.0).contains(&temp)
+                                                {
                                                     result.gpu.push(ThermalReading {
                                                         name: parts[0].to_string(),
                                                         celsius: Some(temp),
-                                                        detail: Some("NVIDIA GPU sensor (nvidia-smi)".into()),
+                                                        detail: Some(
+                                                            "NVIDIA GPU sensor (nvidia-smi)".into(),
+                                                        ),
                                                     });
                                                     found_gpu = true;
                                                 }
@@ -332,13 +336,25 @@ mod tests {
     fn storage_temperature_requires_an_exact_unique_match() {
         let disks = vec!["Model A".to_string(), "Model B".to_string()];
         let smart = vec![("model a".to_string(), 42.0)];
-        assert_eq!(unique_storage_temperature("Model A", &disks, &smart), Some(42.0));
+        assert_eq!(
+            unique_storage_temperature("Model A", &disks, &smart),
+            Some(42.0)
+        );
         assert_eq!(unique_storage_temperature("Model B", &disks, &smart), None);
         assert_eq!(unique_storage_temperature("Model", &disks, &smart), None);
         let duplicates = vec!["Model A".to_string(), "model a".to_string()];
-        assert_eq!(unique_storage_temperature("Model A", &duplicates, &smart), None);
+        assert_eq!(
+            unique_storage_temperature("Model A", &duplicates, &smart),
+            None
+        );
         let ambiguous = vec![("Model A".to_string(), 42.0), ("model a".to_string(), 43.0)];
-        assert_eq!(unique_storage_temperature("Model A", &disks, &ambiguous), None);
-        assert_eq!(unique_storage_temperature("Model A", &disks, &[("Model A".into(), f64::NAN)]), None);
+        assert_eq!(
+            unique_storage_temperature("Model A", &disks, &ambiguous),
+            None
+        );
+        assert_eq!(
+            unique_storage_temperature("Model A", &disks, &[("Model A".into(), f64::NAN)]),
+            None
+        );
     }
 }
