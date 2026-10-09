@@ -1,4 +1,5 @@
 fn main() {
+    let _ = std::fs::create_dir_all("../../web/dist");
     tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
         tauri_build::AppManifest::new().commands(&[
             "get_runtime_policy",
