@@ -17,7 +17,8 @@ import {
 // Direct WMI telemetry is explicitly requested only. Never start hardware polling
 // just because a user opened the Monitoring page on an unvalidated machine.
 function getTempStatus(celsius: number | null) {
-  if (celsius === null || !Number.isFinite(celsius)) return { label: 'Not available', className: 'status-normal' };
+  if (celsius === null || !Number.isFinite(celsius))
+    return { label: 'Not available', className: 'status-normal' };
   if (celsius >= 80) return { label: 'High', className: 'status-hot' };
   if (celsius >= 70) return { label: 'Warm', className: 'status-warm' };
   if (celsius >= 45) return { label: 'Measured', className: 'status-optimal' };
@@ -104,7 +105,6 @@ export default function DirectThermal() {
     }
   }, [allowed]);
 
-
   if (!isDesktop) {
     return (
       <section className="direct-thermal-section" aria-label="Hardware temperatures">
@@ -153,12 +153,24 @@ export default function DirectThermal() {
           <span className={`pulse-dot ${loading ? 'is-loading' : 'is-live'}`} />
           <span>{loading ? 'Reading' : lastAt ? 'Last requested' : 'Not connected'}</span>
         </div>
-        <button className="button secondary" type="button" disabled={!allowed || loading} onClick={() => void refresh()}>
+        <button
+          className="button secondary"
+          type="button"
+          disabled={!allowed || loading}
+          onClick={() => void refresh()}
+        >
           {loading ? 'Reading…' : 'Read temperatures once'}
         </button>
       </div>
-      <p className="muted">Experimental, user-initiated sensor read. No background polling. Missing or ambiguous temperatures are not estimated.</p>
-      {error && <p role="status" className="muted">{error}</p>}
+      <p className="muted">
+        Experimental, user-initiated sensor read. No background polling. Missing or ambiguous
+        temperatures are not estimated.
+      </p>
+      {error && (
+        <p role="status" className="muted">
+          {error}
+        </p>
+      )}
       {!hasRequested && <p className="muted">No temperature measurements requested yet.</p>}
 
       <div className="hardware-cards-grid">
