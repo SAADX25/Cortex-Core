@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-open-external-sensor-session"
+description = "Enables the open_external_sensor_session command without any pre-configured scope."
+commands.allow = ["open_external_sensor_session"]
+
+[[permission]]
+identifier = "deny-open-external-sensor-session"
+description = "Denies the open_external_sensor_session command without any pre-configured scope."
+commands.deny = ["open_external_sensor_session"]

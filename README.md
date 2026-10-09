@@ -1,8 +1,10 @@
 # Cortex Core
 
-Live temperature monitoring is quarantined after three full-system freezes. Application integration is restored to the committed Update-10 baseline; no sensor engine, provider, subscription or Monitoring route starts with the app. Unfinished work is preserved in [quarantine/update-11](quarantine/update-11/README.md). See [the incident and isolation status](docs/desktop/update-11-monitoring.md). Do not run live sensor tests on the affected machine.
+**Update-14:** My PC, 3D View, Settings and an experimental Monitoring dashboard are available. Startup creates dormant external-adapter state and performs no thermal requests, listener inspection or sensor initialization. The legacy native monitoring providers remain quarantined after three full-system freezes; their root cause is unresolved. Preserve [quarantine/update-11](quarantine/update-11/README.md) and [incident evidence](docs/desktop/update-11-monitoring.md). Do not execute hardware probes or enable any real sensor source on the affected development PC.
 
-A safety-only Windows development executable was built with `pnpm desktop:build:safety` (`--debug --no-bundle`). The safety isolation is committed as `15d75c2` (Update-11) on GitHub. Two subsequent fifteen-minute runtime observations passed with Monitoring absent; the original unsolicited exit detected after about 92 seconds did not recur and its cause remains unknown. Opt-in debug lifecycle evidence now distinguishes native exit from debugger disconnect and planned test cleanup. Neither the unexplained exit nor the system-freeze issue is called fixed. No real provider may be enabled on this machine.
+Monitoring reads normalized temperatures through Rust from a user-managed LibreHardwareMonitor installation at one fixed loopback endpoint, after explicit session consent and local-only binding verification. It includes bounded in-memory charts (1–60 minutes), clear freshness/availability and optional on-screen warnings. No LHM code, binary, driver or helper is bundled or executed by Cortex. This integration is **mock-tested, not hardware-validated or production-ready**. Official Windows LHM builds may be refused because shared HTTP.sys/wildcard listeners cannot establish local-only isolation; no compatible stock setup is guaranteed. See [setup and unsupported behavior](docs/desktop/temperature-setup.md), [source/license research](docs/desktop/external-temperature-sources.md) and [Update-14 audit, validation and future architecture](docs/desktop/update-14-thermal.md).
+
+Historical Update-11 safety executable observations (including two fifteen-minute observations with Monitoring absent) apply only to their recorded artifacts. The earlier unsolicited exit and system freezes are not called fixed. Update-14 was compiled and mock-tested without launching the native application or accessing physical sensors.
 
 **My PC — local Windows hardware detection.** Cortex Core automatically reads the hardware installed in your current PC, presents a clean desktop dashboard, and optionally illustrates the detected devices in a separate read-only 3D view. Scans and the last successful snapshot stay local and work offline. Generic visuals are explicitly labeled; Windows-reported specifications are never replaced with fixture data.
 
@@ -18,7 +20,7 @@ pnpm desktop:dev
 pnpm desktop:package
 ```
 
-See [hardware sources, scanner limitations and milestone validation](docs/desktop/my-pc-milestone.md) and [desktop development, security and distribution](docs/desktop/development.md). `apps/web` is the development/browser-test renderer; ordinary browsers cannot scan a Windows PC. `?graphics=off` exercises the accessible hardware fallback. Main navigation contains only My PC, 3D View and Settings. Previous [assembly work](docs/desktop/assembly.md) remains isolated for possible future use. `pnpm test:monitoring:safe` verifies the new dormant diagnostic controller using a hardware-free helper stub; it does not build or launch the desktop application.
+See [hardware sources, scanner limitations and milestone validation](docs/desktop/my-pc-milestone.md) and [desktop development, security and distribution](docs/desktop/development.md). `apps/web` is the development/browser-test renderer; ordinary browsers cannot scan a Windows PC or connect sensor sources. `?graphics=off` exercises the accessible hardware fallback. Main navigation contains My PC, 3D View, Settings and Monitoring. Previous [assembly work](docs/desktop/assembly.md) remains isolated for possible future use. `pnpm test:monitoring:safe` verifies the dormant diagnostic controller using a hardware-free helper stub; `pnpm test:sensors:mock` tests the external adapter with networking disabled at test compile time. Neither launches the desktop application. The desktop launch/package commands above are general developer instructions, not authorization for live testing on the affected PC; thermal consent remains off by default in every build.
 
 ## Workspace
 
@@ -45,6 +47,8 @@ pnpm typecheck
 pnpm lint
 pnpm test
 pnpm build
+pnpm test:sensors:mock
+pnpm test:monitoring:safe
 pnpm exec playwright install chromium firefox webkit
 pnpm test:e2e
 ```

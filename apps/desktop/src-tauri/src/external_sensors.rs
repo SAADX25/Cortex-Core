@@ -4,7 +4,7 @@ use std::{
     collections::HashSet,
     io::{Read, Write},
     net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream},
-    sync::Mutex,
+    sync::{Arc, Mutex},
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
 
@@ -490,8 +490,10 @@ fn response_body(response: &[u8]) -> Result<&[u8], &'static str> {
 
 struct Session {
     generation: u64,
+    owner: Option<u64>,
+    revision: u64,
     enabled: bool,
-    busy: bool,
+    in_flight: Option<u64>,
     next_due: Instant,
     snapshot: Snapshot,
     received: Option<Instant>,
@@ -505,8 +507,10 @@ impl Default for Adapter {
         Self {
             session: Mutex::new(Session {
                 generation: 0,
+                owner: None,
+                revision: 0,
                 enabled: false,
-                busy: false,
+                in_flight: None,
                 next_due: Instant::now(),
                 snapshot: Snapshot::unavailable("disabled"),
                 received: None,
@@ -516,12 +520,7 @@ impl Default for Adapter {
     }
 }
 impl Adapter {
-    // Consent is session-only. Startup/restart/reload never restores it.
-    pub fn configure(&self, consent: bool) -> Result<u64, String> {
-        let mut s = self
-            .session
-            .lock()
-            .map_err(|_| "Sensor state unavailable")?;
+    fn reset(s: &mut Session, consent: bool) -> Result<u64, String> {
         s.generation = s
             .generation
             .checked_add(1)
@@ -532,8 +531,50 @@ impl Adapter {
         if let Some(socket) = s.socket.take() {
             let _ = socket.shutdown(std::net::Shutdown::Both);
         }
-        // Retain busy and next_due across toggles: no parallel/replacement workers.
         Ok(s.generation)
+    }
+    /// Issue an inert owner lease. Delayed lease creation can never grant consent.
+    pub fn open_session(&self) -> Result<u64, String> {
+        let mut s = self
+            .session
+            .lock()
+            .map_err(|_| "Sensor state unavailable")?;
+        let owner = Self::reset(&mut s, false)?;
+        s.owner = Some(owner);
+        s.revision = 0;
+        Ok(owner)
+    }
+    /// Revisions express user action order, independent of IPC arrival/completion order.
+    pub fn configure_owned(&self, owner: u64, revision: u64, consent: bool) -> Result<u64, String> {
+        let mut s = self
+            .session
+            .lock()
+            .map_err(|_| "Sensor state unavailable")?;
+        if s.owner != Some(owner)
+            || revision == 0
+            || revision > 9_007_199_254_740_991
+            || revision <= s.revision
+        {
+            return Err("Expired sensor owner or out-of-order consent command".into());
+        }
+        s.revision = revision;
+        Self::reset(&mut s, consent)
+    }
+    /// Native window/navigation lifecycle revocation invalidates the owner itself.
+    pub fn revoke_all(&self) -> Result<u64, String> {
+        let mut s = self
+            .session
+            .lock()
+            .map_err(|_| "Sensor state unavailable")?;
+        s.owner = None;
+        Self::reset(&mut s, false)
+    }
+    // Backward-compatible legacy disconnect. Unowned enables fail closed.
+    pub fn configure(&self, consent: bool) -> Result<u64, String> {
+        if consent {
+            return Err("Explicit owned sensor session required".into());
+        }
+        self.revoke_all()
     }
     fn reserve(&self, generation: u64) -> Result<bool, String> {
         let mut s = self
@@ -543,10 +584,10 @@ impl Adapter {
         if !s.enabled || generation != s.generation {
             return Ok(false);
         }
-        if s.busy || Instant::now() < s.next_due {
+        if s.in_flight.is_some() || Instant::now() < s.next_due {
             return Ok(false);
         }
-        s.busy = true;
+        s.in_flight = Some(generation);
         Ok(true)
     }
     pub fn snapshot(&self, generation: u64) -> Snapshot {
@@ -569,8 +610,14 @@ impl Adapter {
         snapshot
     }
     fn fetch(&self, generation: u64) -> Result<Snapshot, &'static str> {
+        if !self.is_current(generation) {
+            return Err("disabled");
+        }
         let deadline = Instant::now() + DEADLINE;
         let owner = validate_listeners(&listeners()?)?; // Before any network request.
+        if !self.is_current(generation) {
+            return Err("disabled");
+        }
         let remaining = || {
             deadline
                 .checked_duration_since(Instant::now())
@@ -595,6 +642,9 @@ impl Adapter {
         }
         if validate_listeners(&listeners()?)? != owner {
             return Err("Server bindings changed; connection refused");
+        }
+        if !self.is_current(generation) {
+            return Err("disabled");
         }
         socket
             .set_write_timeout(Some(remaining()?))
@@ -630,25 +680,58 @@ impl Adapter {
             .as_millis() as u64;
         parse_json(response_body(&response)?, now)
     }
-    // Caller reserves synchronously, then dispatches ONE blocking worker off UI thread.
-    pub fn begin(&self, generation: u64) -> Result<bool, String> {
+    fn is_current(&self, generation: u64) -> bool {
+        self.session
+            .lock()
+            .is_ok_and(|s| s.enabled && s.generation == generation)
+    }
+    #[cfg(test)]
+    fn begin(&self, generation: u64) -> Result<bool, String> {
         self.reserve(generation)
     }
-    pub fn complete(&self, generation: u64) -> Snapshot {
-        let result = self.fetch(generation);
-        self.finish(generation, result)
+    // The permit releases its slot on scheduling failure, dropped task or worker unwind.
+    pub fn ticket(self: &Arc<Self>, generation: u64) -> Result<Option<ReadTicket>, String> {
+        Ok(self.reserve(generation)?.then(|| ReadTicket {
+            adapter: self.clone(),
+            generation,
+            completed: false,
+        }))
     }
     fn finish(&self, generation: u64, result: Result<Snapshot, &'static str>) -> Snapshot {
         if let Ok(mut s) = self.session.lock() {
-            s.busy = false;
-            s.socket = None;
-            s.next_due = Instant::now() + INTERVAL;
+            if s.in_flight == Some(generation) {
+                s.in_flight = None;
+                s.socket = None;
+                s.next_due = Instant::now() + INTERVAL;
+            }
             if s.enabled && s.generation == generation {
                 s.received = result.as_ref().ok().map(|_| Instant::now());
                 s.snapshot = result.unwrap_or_else(Snapshot::unavailable);
             }
         }
         self.snapshot(generation)
+    }
+}
+
+pub struct ReadTicket {
+    adapter: Arc<Adapter>,
+    generation: u64,
+    completed: bool,
+}
+impl ReadTicket {
+    pub fn complete(mut self) -> Snapshot {
+        let result = self.adapter.fetch(self.generation);
+        let snapshot = self.adapter.finish(self.generation, result);
+        self.completed = true;
+        snapshot
+    }
+}
+impl Drop for ReadTicket {
+    fn drop(&mut self) {
+        if !self.completed {
+            self.adapter
+                .finish(self.generation, Err("Sensor worker canceled or failed"));
+        }
     }
 }
 

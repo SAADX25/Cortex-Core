@@ -109,11 +109,24 @@ export function parseExternalSnapshot(value: unknown): ExternalSnapshot {
     )
       throw new Error('Invalid normalized sensor');
   }
-  return structuredClone(value) as unknown as ExternalSnapshot;
+  const snapshot = structuredClone(value) as unknown as ExternalSnapshot;
+  const counts = new Map<string, number>();
+  for (const sensor of snapshot.sensors) {
+    const key = JSON.stringify([sensor.hardwareId, sensor.sensorId]);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  for (const sensor of snapshot.sensors) {
+    if (counts.get(JSON.stringify([sensor.hardwareId, sensor.sensorId])) !== 1) {
+      sensor.availability = 'ambiguous';
+      sensor.value = null;
+    }
+  }
+  return snapshot;
 }
 export function sensorValue(sensor: ExternalSensor, now: number): string {
   if (
     sensor.availability !== 'available' ||
+    sensor.category === 'unsupported' ||
     sensor.value === null ||
     now < sensor.observedAt ||
     now - sensor.observedAt > 15000
@@ -123,7 +136,8 @@ export function sensorValue(sensor: ExternalSensor, now: number): string {
 }
 
 export interface SensorBridge {
-  configure(consent: boolean): Promise<number>;
+  open(): Promise<number>;
+  configure(consent: boolean, owner: number, revision: number): Promise<number>;
   read(session: number): Promise<unknown>;
 }
 export interface SensorScheduler {
@@ -136,54 +150,94 @@ export class SensorPoller {
   private timer: unknown;
   private busy = false;
   private enabled = false;
+  private owner: number | undefined;
+  private revision = 0;
   constructor(
     private bridge: SensorBridge,
     private scheduler: SensorScheduler,
     private publish: (snapshot: ExternalSnapshot) => void,
+    private changed: (phase: 'disconnected' | 'connecting' | 'monitoring' | 'error') => void = () =>
+      undefined,
   ) {}
   async start() {
-    if (this.enabled || this.busy) return false;
+    if (this.enabled) return false;
     this.enabled = true;
     const generation = ++this.generation;
-    this.busy = true;
+    this.changed('connecting');
+    this.publish(unavailableSensors('waiting'));
     try {
-      const session = await this.bridge.configure(true);
+      const owner = await this.bridge.open();
       if (!this.enabled || this.generation !== generation) return false;
-      this.busy = false;
+      this.owner = owner;
+      this.revision = 1;
+      const session = await this.bridge.configure(true, owner, this.revision);
+      if (!this.enabled || this.generation !== generation) return false;
       await this.poll(session, generation);
       return this.enabled && this.generation === generation;
     } catch {
-      if (this.generation === generation)
-        this.publish(unavailableSensors('Sensor connection unavailable'));
-      this.enabled = false;
+      this.fail(generation, 'Sensor session unavailable. Reconnect to try again.');
       return false;
-    } finally {
-      this.busy = false;
     }
   }
+  private schedule(session: number, generation: number) {
+    if (!this.enabled || generation !== this.generation) return;
+    if (this.timer !== undefined) this.scheduler.cancel(this.timer);
+    this.timer = this.scheduler.after(() => {
+      this.timer = undefined;
+      void this.poll(session, generation);
+    }, 5000);
+  }
+  private revoke() {
+    const owner = this.owner;
+    this.owner = undefined;
+    if (owner !== undefined)
+      void this.bridge.configure(false, owner, ++this.revision).catch(() => undefined);
+  }
+  private fail(generation: number, status: string) {
+    if (generation !== this.generation) return;
+    this.enabled = false;
+    this.revoke();
+    this.publish(unavailableSensors(status));
+    this.changed('error');
+  }
   private async poll(session: number, generation: number) {
-    if (!this.enabled || generation !== this.generation || this.busy) return;
+    if (!this.enabled || generation !== this.generation) return;
+    if (this.busy) {
+      this.schedule(session, generation);
+      return;
+    }
     this.busy = true;
     try {
       const snapshot = parseExternalSnapshot(await this.bridge.read(session));
-      if (this.enabled && generation === this.generation) this.publish(snapshot);
+      if (!this.enabled || generation !== this.generation) return;
+      if (!['connected', 'waiting', 'stale'].includes(snapshot.status)) {
+        this.fail(
+          generation,
+          snapshot.status === 'disabled'
+            ? 'Sensor session ended. Reconnect to try again.'
+            : snapshot.status,
+        );
+        return;
+      }
+      this.publish(snapshot);
+      this.changed(snapshot.status === 'waiting' ? 'connecting' : 'monitoring');
     } catch {
-      if (this.enabled && generation === this.generation)
-        this.publish(unavailableSensors('Sensor server unavailable or response rejected'));
+      this.fail(
+        generation,
+        'Sensor server unavailable or response rejected. Reconnect to try again.',
+      );
     } finally {
       this.busy = false;
-      if (this.enabled && generation === this.generation)
-        this.timer = this.scheduler.after(() => {
-          void this.poll(session, generation);
-        }, 5000);
+      this.schedule(session, generation);
     }
   }
   stop() {
     this.enabled = false;
     ++this.generation;
     if (this.timer !== undefined) this.scheduler.cancel(this.timer);
+    this.timer = undefined;
+    this.revoke();
     this.publish(unavailableSensors('disabled'));
-    // Revoke even if setup or a native read is in flight. Native generation rejects late data.
-    void this.bridge.configure(false).catch(() => undefined);
+    this.changed('disconnected');
   }
 }

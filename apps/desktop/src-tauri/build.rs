@@ -11,6 +11,7 @@ fn main() {
             "load_development_build",
             "save_development_build",
             "configure_external_sensors",
+            "open_external_sensor_session",
             "read_external_sensors",
         ]),
     ))
