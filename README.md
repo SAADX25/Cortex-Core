@@ -1,5 +1,9 @@
 # Cortex Core
 
+Live temperature monitoring is quarantined after three full-system freezes. Application integration is restored to the committed Update-10 baseline; no sensor engine, provider, subscription or Monitoring route starts with the app. Unfinished work is preserved in [quarantine/update-11](quarantine/update-11/README.md). See [the incident and isolation status](docs/desktop/update-11-monitoring.md). Do not run live sensor tests on the affected machine.
+
+A safety-only Windows development executable was built with `pnpm desktop:build:safety` (`--debug --no-bundle`). Ordinary desktop smoke and native regressions passed, but an idle observation ended with an unexplained application exit after about 92 seconds. Stability is not certified and the conditional safety commit has not been made. Monitoring remains absent from the executable; the system-freeze issue is not called fixed.
+
 **My PC — local Windows hardware detection.** Cortex Core automatically reads the hardware installed in your current PC, presents a clean desktop dashboard, and optionally illustrates the detected devices in a separate read-only 3D view. Scans and the last successful snapshot stay local and work offline. Generic visuals are explicitly labeled; Windows-reported specifications are never replaced with fixture data.
 
 ## Launch the desktop application
@@ -14,7 +18,7 @@ pnpm desktop:dev
 pnpm desktop:package
 ```
 
-See [hardware sources, scanner limitations and milestone validation](docs/desktop/my-pc-milestone.md) and [desktop development, security and distribution](docs/desktop/development.md). `apps/web` is the development/browser-test renderer; ordinary browsers cannot scan a Windows PC. `?graphics=off` exercises the accessible hardware fallback. Main navigation contains only My PC, 3D View and Settings. Previous [assembly work](docs/desktop/assembly.md) remains isolated for possible future use.
+See [hardware sources, scanner limitations and milestone validation](docs/desktop/my-pc-milestone.md) and [desktop development, security and distribution](docs/desktop/development.md). `apps/web` is the development/browser-test renderer; ordinary browsers cannot scan a Windows PC. `?graphics=off` exercises the accessible hardware fallback. Main navigation contains only My PC, 3D View and Settings. Previous [assembly work](docs/desktop/assembly.md) remains isolated for possible future use. `pnpm test:monitoring:safe` verifies the new dormant diagnostic controller using a hardware-free helper stub; it does not build or launch the desktop application.
 
 ## Workspace
 

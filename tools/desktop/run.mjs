@@ -5,6 +5,9 @@ import { fileURLToPath } from 'node:url';
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const mode = process.argv[2];
 const env = { ...process.env };
+// Keep local Rust builds within modest-memory Windows machines; callers may opt into more jobs.
+env.CARGO_BUILD_JOBS ??= '1';
+env.RUST_TEST_THREADS ??= '1';
 // Windows environment keys are case-insensitive, but spawn deduplicates them.
 const pathKey = Object.keys(env).find((key) => key.toLowerCase() === 'path') ?? 'PATH';
 const inheritedPath = env[pathKey];
@@ -28,7 +31,11 @@ if (mode.startsWith('rust-')) {
   execution = spawnSync('cargo', args, { cwd: resolve(cwd, 'src-tauri'), env, stdio: 'inherit' });
 } else {
   const cli = resolve(cwd, 'node_modules/@tauri-apps/cli/tauri.js');
-  execution = spawnSync(process.execPath, [cli, mode, ...process.argv.slice(3)], {
+  const cliArgs =
+    mode === 'safety-build'
+      ? ['build', '--debug', '--no-bundle']
+      : [mode, ...process.argv.slice(3)];
+  execution = spawnSync(process.execPath, [cli, ...cliArgs], {
     cwd,
     env,
     stdio: 'inherit',
