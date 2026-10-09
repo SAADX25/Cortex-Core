@@ -2,6 +2,7 @@ import { createStore } from 'zustand/vanilla';
 import { invoke } from '@tauri-apps/api/core';
 import { isDesktop } from './platform';
 import { parseHardwareScan, type HardwareScan } from './hardware';
+import { guardHardwareBridge, HardwareAccessDisabled, runtimePolicy } from './runtime-policy';
 export interface HardwareBridge {
   restore(): Promise<unknown>;
   scan(): Promise<unknown>;
@@ -58,12 +59,15 @@ export function createHardwareStore(bridge: HardwareBridge) {
               : fresh,
             scanning: false,
           });
-        } catch {
+        } catch (error) {
           set({
             scanning: false,
-            error: isDesktop
-              ? 'Hardware scanning is unavailable. Your last successful scan is kept. Rescan to try again.'
-              : 'Local hardware scanning is available in the Windows desktop app.',
+            error:
+              error instanceof HardwareAccessDisabled
+                ? error.message
+                : isDesktop
+                  ? 'Hardware scanning is unavailable. Your last successful scan is kept. Rescan to try again.'
+                  : 'Local hardware scanning is available in the Windows desktop app.',
           });
         }
       })();
@@ -75,8 +79,13 @@ export function createHardwareStore(bridge: HardwareBridge) {
     },
   }));
 }
-export const hardwareStore = createHardwareStore({
-  restore: () => (isDesktop ? invoke('load_hardware_scan') : Promise.resolve(null)),
-  scan: () =>
-    isDesktop ? invoke('scan_hardware') : Promise.reject(new Error('Windows desktop required')),
-});
+export const hardwareStore = createHardwareStore(
+  guardHardwareBridge(
+    {
+      restore: () => (isDesktop ? invoke('load_hardware_scan') : Promise.resolve(null)),
+      scan: () =>
+        isDesktop ? invoke('scan_hardware') : Promise.reject(new Error('Windows desktop required')),
+    },
+    runtimePolicy,
+  ),
+);

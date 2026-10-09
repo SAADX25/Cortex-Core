@@ -4,6 +4,7 @@
   "description": "Only the local main window may scan existing fixed specification sources, restore its cache, read catalog/status, use isolated build storage, set fullscreen, record bounded graphics codes, open reviewed documentation and explicitly consent to the fixed loopback read-only external sensor adapter. Legacy monitoring remains quarantined. No generic filesystem, shell, network or query access.",
   "windows": ["main"],
   "permissions": [
+    "allow-get-runtime-policy",
     "allow-scan-hardware",
     "allow-load-hardware-scan",
     "allow-load-catalog-snapshot",

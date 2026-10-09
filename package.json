@@ -26,6 +26,7 @@
     "desktop:dev": "pnpm --filter @cortex/desktop dev",
     "desktop:build": "pnpm --filter @cortex/desktop build",
     "desktop:build:safety": "node tools/desktop/run.mjs safety-build",
+    "desktop:build:safe-mode": "node tools/desktop/run.mjs safe-mode-build",
     "test:desktop:safety-startup": "node tools/desktop/safety-startup.mjs",
     "test:desktop:exit-passive": "node tools/desktop/exit-investigation.mjs passive",
     "test:desktop:exit-extended": "node tools/desktop/exit-investigation.mjs extended",

@@ -4,6 +4,7 @@ import { Icon, type IconName } from './icons';
 import Settings from './Settings';
 import { isDesktop } from './platform';
 import { hardwareStore } from './hardware-store';
+import { useRuntimePolicy } from './runtime-policy';
 import {
   hardwareCategories,
   categoryNames,
@@ -24,6 +25,9 @@ const icons: Record<HardwareCategory, IconName> = {
   os: 'grid',
 };
 export default function App() {
+  const policy = useRuntimePolicy();
+  const safeMode = policy?.mode === 'safe';
+  const discoveryAllowed = policy?.hardwareDiscovery === true;
   const [route, setRoute] = useState(location.hash.slice(1));
   const [selected, setSelected] = useState<HardwareCategory | null>(null);
   const [copyStatus, setCopyStatus] = useState('');
@@ -99,7 +103,7 @@ export default function App() {
           <strong>{view}</strong>
           <span className="local-badge">
             <span className="hint-dot" />
-            {isDesktop ? 'ON YOUR DEVICE' : 'BROWSER PREVIEW'}
+            {safeMode ? 'SAFE MODE' : isDesktop ? 'ON YOUR DEVICE' : 'BROWSER PREVIEW'}
           </span>
         </header>
         <div id="main-content" tabIndex={-1}>
@@ -134,19 +138,27 @@ export default function App() {
                     My PC<span className="title-dot">.</span>
                   </h1>
                   <p className="muted">
-                    The hardware inside your computer. Automatically detected.
+                    {safeMode
+                      ? 'Safe Mode: hardware discovery and temperatures disabled.'
+                      : 'The hardware inside your computer. Automatically detected.'}
                   </p>
                 </div>
                 <div className="scan-label">
                   <span className="hint-dot" />
-                  {scanning ? 'Scanning your PC…' : scan ? 'Hardware detected' : 'Ready to scan'}
+                  {!discoveryAllowed
+                    ? 'Discovery disabled'
+                    : scanning
+                      ? 'Scanning your PC…'
+                      : scan
+                        ? 'Hardware detected'
+                        : 'Ready to scan'}
                   {scan && <small>Last scanned: {new Date(scan.scannedAt).toLocaleString()}</small>}
                 </div>
               </div>
               <div className="dashboard-actions">
                 <button
                   className="button secondary"
-                  disabled={scanning}
+                  disabled={scanning || !discoveryAllowed}
                   onClick={() => void rescan()}
                 >
                   <Icon name="reset" />
@@ -177,12 +189,20 @@ export default function App() {
                 <div className="scan-empty" role="status">
                   <Icon name="chip" size={60} />
                   <h2>
-                    {scanning || !error ? 'Scanning your PC…' : 'Hardware information unavailable'}
+                    {!discoveryAllowed
+                      ? 'Hardware information not available'
+                      : scanning || !error
+                        ? 'Scanning your PC…'
+                        : 'Hardware information unavailable'}
                   </h2>
                   <p className="muted">
-                    {isDesktop
-                      ? 'Reading system-reported specifications locally.'
-                      : 'Open Cortex Core Desktop to detect your Windows hardware.'}
+                    {!discoveryAllowed
+                      ? safeMode
+                        ? 'Safe Mode does not scan hardware or restore previous hardware scans.'
+                        : 'Waiting for a valid native safety policy. Hardware access is disabled.'
+                      : isDesktop
+                        ? 'Reading system-reported specifications locally.'
+                        : 'Open Cortex Core Desktop to detect your Windows hardware.'}
                   </p>
                 </div>
               ) : (
