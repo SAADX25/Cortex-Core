@@ -36,6 +36,8 @@ pub struct ThermalReading {
 pub struct StorageThermal {
     /// Drive model or friendly name.
     pub name: String,
+    /// Windows disk number, for disambiguating duplicate model names (not a serial).
+    pub disk_index: Option<u64>,
     /// Celsius temperature reported by SMART counter, if available.
     pub celsius: Option<f64>,
     /// Drive health status (e.g. "OK", "Healthy").
@@ -46,30 +48,94 @@ pub struct StorageThermal {
     pub size_gb: Option<u64>,
 }
 
-/// Only accept a physically reported storage temperature where both inventories
-/// identify exactly one drive with the same model name. Never manufacture a value.
-fn unique_storage_temperature(
-    model: &str,
-    disk_models: &[String],
-    smart_temps: &[(String, f64)],
-) -> Option<f64> {
-    let matches_disk = disk_models
+/// Normalize local-only device serials for cross-provider identity comparison.
+/// These values must never be sent to the renderer or written to diagnostics.
+fn serial_key(value: &str) -> Option<String> {
+    let serial: String = value
+        .chars()
+        .filter(char::is_ascii_alphanumeric)
+        .map(|character| character.to_ascii_uppercase())
+        .collect();
+    (serial.len() >= 6 && serial.len() <= 128).then_some(serial)
+}
+
+/// Reject missing or ambiguous counter data instead of inferring a temperature.
+fn unique_counter_temperature(device_id: &str, counters: &[(String, f64)]) -> Option<f64> {
+    let readings: Vec<f64> = counters
         .iter()
-        .filter(|name| name.trim().eq_ignore_ascii_case(model.trim()))
-        .count();
-    if matches_disk != 1 {
-        return None;
-    }
-    let readings: Vec<f64> = smart_temps
-        .iter()
-        .filter(|(name, temp)| {
-            name.trim().eq_ignore_ascii_case(model.trim())
-                && temp.is_finite()
-                && (1.0..=120.0).contains(temp)
+        .filter(|(id, value)| {
+            id == device_id && value.is_finite() && (1.0..=120.0).contains(value)
         })
-        .map(|(_, temp)| *temp)
+        .map(|(_, value)| *value)
         .collect();
     (readings.len() == 1).then(|| readings[0])
+}
+
+/// Link Windows disks by unique manufacturer serial, not by model. Two A400s
+/// have the same model but different serials. The optional Windows disk number
+/// provides an independent fallback, *only* when its serial agrees as well.
+fn verified_storage_temperature(
+    serial: Option<&str>,
+    index: Option<u64>,
+    disk_serials: &[Option<String>],
+    physical_disks: &[(String, String)],
+    windows_disks: &[(u64, String)],
+    counters: &[(String, f64)],
+) -> Option<f64> {
+    let key = serial_key(serial?)?;
+    if disk_serials
+        .iter()
+        .filter(|candidate| candidate.as_deref().and_then(serial_key) == Some(key.clone()))
+        .count()
+        != 1
+    {
+        return None;
+    }
+
+    let physical_matches: Vec<&str> = physical_disks
+        .iter()
+        .filter(|(_, candidate)| serial_key(candidate) == Some(key.clone()))
+        .map(|(id, _)| id.as_str())
+        .collect();
+    if physical_matches.len() > 1 {
+        return None;
+    }
+    if let Some(id) = physical_matches.first() {
+        if physical_disks.iter().filter(|(other, _)| other == id).count() != 1 {
+            return None;
+        }
+        if let Some(temperature) = unique_counter_temperature(id, counters) {
+            return Some(temperature);
+        }
+    }
+
+    // MSFT_StorageReliabilityCounter.DeviceId can instead refer to an
+    // MSFT_Disk.Number. Confirm both Windows disk number AND serial, and
+    // refuse a numerical ID claimed by another physical disk.
+    let number = index?;
+    if windows_disks
+        .iter()
+        .filter(|(other, candidate)| {
+            *other == number && serial_key(candidate) == Some(key.clone())
+        })
+        .count()
+        != 1
+        || windows_disks
+            .iter()
+            .filter(|(other, _)| *other == number)
+            .count()
+            != 1
+    {
+        return None;
+    }
+    let id = number.to_string();
+    if physical_disks
+        .iter()
+        .any(|(other, candidate)| other == &id && serial_key(candidate) != Some(key))
+    {
+        return None;
+    }
+    unique_counter_temperature(&id, counters)
 }
 
 #[cfg(all(windows, feature = "hardware-discovery"))]
@@ -236,10 +302,13 @@ pub fn read() -> DirectTemperatures {
     }
 
     // ── 6. Storage (Win32_DiskDrive + SMART Counters) ────────────────────────
-    let mut disks: Vec<(String, String, Option<u64>, String)> = Vec::new();
+    let mut disks: Vec<(String, String, Option<u64>, String, Option<u64>, Option<String>)> =
+        Vec::new();
     if let Some(c) = cimv2.as_ref() {
         if let Ok(rows) =
-            c.raw_query::<Row>("SELECT Model, Status, Size, MediaType FROM Win32_DiskDrive")
+            c.raw_query::<Row>(
+                "SELECT Model, Status, Size, MediaType, Index, SerialNumber FROM Win32_DiskDrive",
+            )
         {
             for row in rows {
                 let model = row
@@ -264,49 +333,80 @@ pub fn read() -> DirectTemperatures {
                     .unwrap_or("Fixed Disk")
                     .trim()
                     .to_string();
-                disks.push((model, status, size, media));
+                let index = row.get("Index").and_then(|value| value.as_u64());
+                let serial = row
+                    .get("SerialNumber")
+                    .and_then(|value| value.as_str())
+                    .map(str::trim)
+                    .map(str::to_string);
+                disks.push((model, status, size, media, index, serial));
             }
         }
     }
 
-    // Optional SMART temperatures via ROOT\Microsoft\Windows\Storage
-    let mut smart_temps: Vec<(String, f64)> = Vec::new();
+    // Read-only Windows storage reliability counters and their documented
+    // identity tables; avoid vendor executables, elevated privileges and drivers.
+    let mut counters: Vec<(String, f64)> = Vec::new();
+    let mut physical_disks: Vec<(String, String)> = Vec::new();
+    let mut windows_disks: Vec<(u64, String)> = Vec::new();
     if let Ok(storage_ns) = WMIConnection::with_namespace_path("ROOT\\Microsoft\\Windows\\Storage")
     {
-        if let Ok(counters) = storage_ns
-            .raw_query::<Row>("SELECT DeviceId, Temperature FROM MSFT_StorageReliabilityCounter")
-        {
-            let physical_disks: Vec<Row> = storage_ns
-                .raw_query::<Row>("SELECT DeviceId, FriendlyName FROM MSFT_PhysicalDisk")
-                .unwrap_or_default();
-            for counter in counters {
-                let dev_id = counter
-                    .get("DeviceId")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                let temp = counter
+        if let Ok(rows) = storage_ns.raw_query::<Row>(
+            "SELECT DeviceId, Temperature FROM MSFT_StorageReliabilityCounter",
+        ) {
+            for row in rows {
+                let device_id = row.get("DeviceId").and_then(|value| value.as_str());
+                let temperature = row
                     .get("Temperature")
-                    .and_then(|v| v.as_u64())
-                    .filter(|t| *t > 0 && *t <= 120);
-                if let Some(celsius) = temp {
-                    let friendly = physical_disks
-                        .iter()
-                        .find(|d| d.get("DeviceId").and_then(|v| v.as_str()) == Some(dev_id))
-                        .and_then(|d| d.get("FriendlyName").and_then(|v| v.as_str()))
-                        .unwrap_or(dev_id);
-                    smart_temps.push((friendly.to_string(), celsius as f64));
+                    .and_then(|value| value.as_u64())
+                    .filter(|value| (1..=120).contains(value));
+                if let (Some(device_id), Some(temperature)) = (device_id, temperature) {
+                    counters.push((device_id.trim().to_string(), temperature as f64));
+                }
+            }
+        }
+        if let Ok(rows) = storage_ns
+            .raw_query::<Row>("SELECT DeviceId, SerialNumber FROM MSFT_PhysicalDisk")
+        {
+            for row in rows {
+                if let (Some(id), Some(serial)) = (
+                    row.get("DeviceId").and_then(|value| value.as_str()),
+                    row.get("SerialNumber").and_then(|value| value.as_str()),
+                ) {
+                    physical_disks.push((id.trim().to_string(), serial.to_string()));
+                }
+            }
+        }
+        if let Ok(rows) =
+            storage_ns.raw_query::<Row>("SELECT Number, SerialNumber FROM MSFT_Disk")
+        {
+            for row in rows {
+                if let (Some(number), Some(serial)) = (
+                    row.get("Number").and_then(|value| value.as_u64()),
+                    row.get("SerialNumber").and_then(|value| value.as_str()),
+                ) {
+                    windows_disks.push((number, serial.to_string()));
                 }
             }
         }
     }
 
-    let disk_models: Vec<String> = disks.iter().map(|(model, _, _, _)| model.clone()).collect();
-    for (model, status, size_gb, media_type) in disks {
-        // Exact, unique name match only. Duplicate models or missing SMART data
-        // remain unavailable; ACPI offsets are not storage measurements.
-        let celsius = unique_storage_temperature(&model, &disk_models, &smart_temps);
+    let disk_serials: Vec<Option<String>> = disks
+        .iter()
+        .map(|(_, _, _, _, _, serial)| serial.clone())
+        .collect();
+    for (model, status, size_gb, media_type, disk_index, serial) in disks {
+        let celsius = verified_storage_temperature(
+            serial.as_deref(),
+            disk_index,
+            &disk_serials,
+            &physical_disks,
+            &windows_disks,
+            &counters,
+        );
         result.storage.push(StorageThermal {
             name: model,
+            disk_index,
             celsius,
             status,
             media_type: Some(media_type),
@@ -333,27 +433,114 @@ mod tests {
     use super::*;
 
     #[test]
-    fn storage_temperature_requires_an_exact_unique_match() {
-        let disks = vec!["Model A".to_string(), "Model B".to_string()];
-        let smart = vec![("model a".to_string(), 42.0)];
+    fn duplicate_model_drives_are_matched_by_distinct_serials() {
+        let disks = vec![Some("SERIAL-A1".into()), Some("SERIAL-B2".into())];
+        let physical = vec![
+            ("1".into(), "SERIAL-A1".into()),
+            ("2".into(), "SERIAL-B2".into()),
+        ];
+        let counters = vec![("1".into(), 26.0), ("2".into(), 28.0)];
         assert_eq!(
-            unique_storage_temperature("Model A", &disks, &smart),
-            Some(42.0)
+            verified_storage_temperature(
+                Some("SERIAL-A1"),
+                Some(1),
+                &disks,
+                &physical,
+                &[],
+                &counters,
+            ),
+            Some(26.0)
         );
-        assert_eq!(unique_storage_temperature("Model B", &disks, &smart), None);
-        assert_eq!(unique_storage_temperature("Model", &disks, &smart), None);
-        let duplicates = vec!["Model A".to_string(), "model a".to_string()];
         assert_eq!(
-            unique_storage_temperature("Model A", &duplicates, &smart),
+            verified_storage_temperature(
+                Some("SERIAL-B2"),
+                Some(2),
+                &disks,
+                &physical,
+                &[],
+                &counters,
+            ),
+            Some(28.0)
+        );
+    }
+
+    #[test]
+    fn disk_number_fallback_must_confirm_serial() {
+        let disks = vec![Some("NVME-SERIAL3".into())];
+        let provider = vec![(3, "NVME-SERIAL3".into())];
+        let counters = vec![("3".into(), 39.0)];
+        assert_eq!(
+            verified_storage_temperature(
+                Some("NVME-SERIAL3"),
+                Some(3),
+                &disks,
+                &[],
+                &provider,
+                &counters,
+            ),
+            Some(39.0)
+        );
+        assert_eq!(
+            verified_storage_temperature(
+                Some("WRONG-SERIAL"),
+                Some(3),
+                &disks,
+                &[],
+                &provider,
+                &counters,
+            ),
             None
         );
-        let ambiguous = vec![("Model A".to_string(), 42.0), ("model a".to_string(), 43.0)];
+    }
+
+    #[test]
+    fn ambiguous_and_missing_storage_sensor_data_fail_closed() {
+        let disks = vec![Some("SERIAL-A1".into()), Some("SERIAL-A1".into())];
+        let physical = vec![("1".into(), "SERIAL-A1".into())];
+        let counters = vec![("1".into(), 42.0)];
         assert_eq!(
-            unique_storage_temperature("Model A", &disks, &ambiguous),
+            verified_storage_temperature(
+                Some("SERIAL-A1"),
+                Some(1),
+                &disks,
+                &physical,
+                &[],
+                &counters,
+            ),
+            None
+        );
+        let unique = vec![Some("SERIAL-A1".into())];
+        assert_eq!(
+            verified_storage_temperature(
+                None,
+                Some(1),
+                &unique,
+                &physical,
+                &[],
+                &counters,
+            ),
             None
         );
         assert_eq!(
-            unique_storage_temperature("Model A", &disks, &[("Model A".into(), f64::NAN)]),
+            verified_storage_temperature(
+                Some("SERIAL-A1"),
+                Some(1),
+                &unique,
+                &physical,
+                &[],
+                &[("1".into(), f64::NAN)],
+            ),
+            None
+        );
+        assert_eq!(
+            verified_storage_temperature(
+                Some("SERIAL-A1"),
+                Some(1),
+                &unique,
+                &physical,
+                &[],
+                &[("1".into(), 40.0), ("1".into(), 45.0)],
+            ),
             None
         );
     }
