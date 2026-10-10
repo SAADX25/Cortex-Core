@@ -15,7 +15,6 @@ import {
 import HardwareInspector from './HardwareInspector';
 import { version } from '../../../package.json';
 const DetectedViewer = lazy(() => import('./viewer/DetectedViewer'));
-const Monitoring = lazy(() => import('./Monitoring'));
 const icons: Record<HardwareCategory, IconName> = {
   cpu: 'chip',
   gpu: 'layers',
@@ -44,13 +43,11 @@ export default function App() {
     return () => window.removeEventListener('hashchange', update);
   }, []);
   const view =
-    route === '/monitoring'
-      ? 'Monitoring'
-      : route === '/3d'
-        ? '3D View'
-        : route === '/settings'
-          ? 'Settings'
-          : 'My PC';
+    route === '/3d'
+      ? '3D View'
+      : route === '/settings'
+        ? 'Settings'
+        : 'My PC';
   async function copy() {
     if (!scan) return;
     try {
@@ -87,10 +84,6 @@ export default function App() {
             <Icon name="info" size={20} />
             Settings
           </a>
-          <a href="#/monitoring" aria-current={view === 'Monitoring' ? 'page' : undefined}>
-            <Icon name="layers" size={20} />
-            Monitoring
-          </a>
         </nav>
         <div className="rail-note">
           <span className="hint-dot" /> Local by design
@@ -99,27 +92,15 @@ export default function App() {
         </div>
       </aside>
       <div className="workspace-body">
-        {view !== 'Monitoring' && (
-          <header className="workspace-header">
-            <strong>{view}</strong>
-            <span className="local-badge">
-              <span className="hint-dot" />
-              {safeMode ? 'SAFE MODE' : isDesktop ? 'ON YOUR DEVICE' : 'BROWSER PREVIEW'}
-            </span>
-          </header>
-        )}
+        <header className="workspace-header">
+          <strong>{view}</strong>
+          <span className="local-badge">
+            <span className="hint-dot" />
+            {safeMode ? 'SAFE MODE' : isDesktop ? 'ON YOUR DEVICE' : 'BROWSER PREVIEW'}
+          </span>
+        </header>
         <div id="main-content" tabIndex={-1}>
-          {view === 'Monitoring' ? (
-            <Suspense
-              fallback={
-                <div className="page-loading" role="status">
-                  Opening Monitoring…
-                </div>
-              }
-            >
-              <Monitoring />
-            </Suspense>
-          ) : view === 'Settings' ? (
+          {view === 'Settings' ? (
             <Settings />
           ) : view === '3D View' && scan ? (
             <Suspense

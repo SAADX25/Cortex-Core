@@ -14,7 +14,6 @@ mod hardware;
 mod hardware;
 mod hardware_types;
 mod safe_mode;
-mod thermal_direct;
 use serde::Serialize;
 use std::{fs, io::Write, path::PathBuf, sync::Mutex};
 use tauri::Manager;
@@ -63,13 +62,6 @@ async fn read_external_sensors(
         .map_err(|_| "Sensor worker unavailable".into())
 }
 
-#[tauri::command]
-async fn read_direct_temperatures() -> Result<thermal_direct::DirectTemperatures, String> {
-    safe_mode::require_access()?;
-    tauri::async_runtime::spawn_blocking(thermal_direct::read)
-        .await
-        .map_err(|_| "Thermal worker unavailable".into())
-}
 
 struct DesktopState {
     hardware_path: PathBuf,
@@ -387,8 +379,7 @@ pub fn run() {
             save_development_build,
             configure_external_sensors,
             open_external_sensor_session,
-            read_external_sensors,
-            read_direct_temperatures
+            read_external_sensors
         ])
         .run(tauri::generate_context!())
         .expect("Cortex Core desktop runtime could not start");

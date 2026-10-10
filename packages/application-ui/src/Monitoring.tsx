@@ -18,7 +18,6 @@ import {
   temperatureWarning,
   type HistoryPoint,
 } from './thermal-history';
-import DirectThermal from './DirectThermal';
 import './monitoring.css';
 
 const labels = {
@@ -225,7 +224,6 @@ export default function Monitoring() {
   };
   return (
     <main className="mypc-page monitoring-page">
-      <DirectThermal />
       {typeof window !== 'undefined' &&
         ('mockSensorState' in window ||
           window.location.search.includes('external-bridge') ||
