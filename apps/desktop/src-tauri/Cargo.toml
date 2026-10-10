@@ -16,11 +16,6 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 name = "cortex-core"
 path = "src/main.rs"
 
-[[bin]]
-name = "monitoring-diagnostic"
-path = "src/monitoring-diagnostic.rs"
-required-features = ["monitoring-diagnostics"]
-
 [build-dependencies]
 tauri-build = { version = "=2.7.1", features = [] }
 
@@ -44,9 +39,6 @@ custom-protocol = ["tauri/custom-protocol"]
 # Safe Mode dominates even if a caller also selects hardware-discovery.
 safe-mode = []
 hardware-discovery = ["dep:wmi", "windows/Win32_Graphics_Dxgi", "windows/Win32_Graphics_Dxgi_Common", "windows/Win32_Graphics_DXCore", "windows/Win32_System_LibraryLoader", "windows/Win32_System_SystemInformation"]
-# Development status/controller only. All five live adapters are absent; no sensor probing.
-# The diagnostic binary rejects release compilation. The ordinary host stays Update-10.
-monitoring-diagnostics = []
 
 [profile.release]
 strip = true
