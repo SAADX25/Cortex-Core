@@ -1,4 +1,0 @@
-# Preserve unfinished live Monitoring locally; it must not enter the safety commit.
-*
-!.gitignore
-!README.md
