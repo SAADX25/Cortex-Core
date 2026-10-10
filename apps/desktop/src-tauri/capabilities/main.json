@@ -16,7 +16,6 @@
     "allow-save-development-build",
     "allow-configure-external-sensors",
     "allow-open-external-sensor-session",
-    "allow-read-external-sensors",
-    "allow-read-direct-temperatures"
+    "allow-read-external-sensors"
   ]
 }
